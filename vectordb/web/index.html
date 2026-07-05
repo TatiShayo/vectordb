@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VectorDB Admin v2</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0e18;--surface:#12151f;--surface2:#1a1e2e;--surface3:#222740;
+  --border:#2a2f47;--accent:#7c6fff;--accent2:#06d6a0;--red:#ef4444;
+  --yellow:#f59e0b;--blue:#3b82f6;--text:#e2e8f0;--muted:#64748b;
+  --r:10px;--font:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono','Fira Code',monospace
+}
+html{font-size:14px}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+
+/* ── Header ── */
+header{display:flex;align-items:center;gap:12px;padding:12px 24px;
+  border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:100}
+.logo{font-size:1.15rem;font-weight:800;background:linear-gradient(135deg,var(--accent),var(--accent2));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.badge{font-size:.65rem;padding:2px 8px;border-radius:99px;background:var(--accent);color:#fff;font-weight:700}
+header .spacer{flex:1}
+#hStatus{font-size:.75rem;color:var(--muted);display:flex;gap:16px;align-items:center}
+#hStatus .dot{width:8px;height:8px;border-radius:50%;background:var(--accent2);display:inline-block;margin-right:4px}
+
+/* ── Nav ── */
+nav{display:flex;gap:2px;padding:8px 24px;border-bottom:1px solid var(--border);background:var(--surface);overflow-x:auto}
+nav button{background:none;border:none;color:var(--muted);cursor:pointer;padding:7px 14px;
+  border-radius:7px;font-size:.82rem;font-family:var(--font);white-space:nowrap;transition:all .15s}
+nav button:hover{background:var(--border);color:var(--text)}
+nav button.active{background:var(--surface3);color:var(--accent);font-weight:600}
+
+main{flex:1;padding:20px 24px;max-width:1200px;width:100%;margin:0 auto}
+.panel{display:none}.panel.active{display:block}
+h2{font-size:1rem;font-weight:600;margin-bottom:14px}
+
+/* ── Cards ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:14px}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:16px 18px;display:flex;flex-direction:column;gap:4px}
+.stat-num{font-size:1.8rem;font-weight:800;color:var(--accent)}
+.stat-label{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+
+/* ── Tables ── */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:.83rem}
+th{text-align:left;padding:8px 12px;color:var(--muted);font-weight:500;border-bottom:1px solid var(--border)}
+td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border:none}
+tbody tr:hover td{background:var(--surface2)}
+
+/* ── Pills ── */
+.pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:.68rem;font-weight:700;letter-spacing:.02em}
+.p-flat{background:#1e3a5f44;color:#60a5fa}.p-ivf{background:#065f4644;color:#34d399}
+.p-hnsw{background:#78350f44;color:#fbbf24}.p-cos{background:#4c1d9544;color:var(--accent)}
+.p-ok{background:#06d6a022;color:var(--accent2)}.p-err{background:#ef444422;color:var(--red)}
+
+/* ── Forms ── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.full{grid-column:1/-1}
+.fg{display:flex;flex-direction:column;gap:5px}
+.fg label{font-size:.75rem;color:var(--muted);font-weight:500}
+input,select,textarea{background:var(--surface2);border:1px solid var(--border);
+  color:var(--text);border-radius:7px;padding:8px 10px;font-family:var(--font);
+  font-size:.85rem;outline:none;width:100%;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+textarea{font-family:var(--mono);resize:vertical;min-height:70px}
+select option{background:var(--surface2)}
+
+/* ── Buttons ── */
+.btn{padding:7px 16px;border-radius:7px;border:none;cursor:pointer;
+  font-size:.82rem;font-weight:600;font-family:var(--font);transition:all .15s;
+  display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{filter:brightness(1.15)}
+.btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-ghost:hover{border-color:var(--accent)}
+.btn-danger{background:#7f1d1d33;color:var(--red);border:1px solid #7f1d1d44}
+.btn-danger:hover{background:var(--red);color:#fff;border-color:var(--red)}
+.btn-success{background:#06d6a033;color:var(--accent2);border:1px solid #06d6a044}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── Results ── */
+.result-list{display:flex;flex-direction:column;gap:8px}
+.result-item{background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:12px 14px;display:flex;align-items:flex-start;gap:12px}
+.result-rank{font-size:1.1rem;font-weight:800;color:var(--accent);min-width:26px;text-align:center}
+.result-body{flex:1;min-width:0}
+.result-id{font-family:var(--mono);font-size:.78rem;color:var(--muted)}
+.result-score{font-size:.78rem;color:var(--accent2);float:right;font-weight:600}
+.result-cached{font-size:.68rem;color:var(--yellow);float:right;margin-left:8px}
+.result-meta{font-size:.75rem;margin-top:4px;color:var(--muted);word-break:break-all}
+
+/* ── Charts (pure CSS bars) ── */
+.bar-chart{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.bar-row{display:flex;align-items:center;gap:8px;font-size:.78rem}
+.bar-label{width:90px;text-align:right;color:var(--muted);flex-shrink:0}
+.bar-wrap{flex:1;background:var(--surface3);border-radius:4px;height:16px;overflow:hidden}
+.bar-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:4px;transition:width .4s}
+.bar-val{width:60px;color:var(--text);font-family:var(--mono)}
+
+/* ── Code ── */
+pre{background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+  padding:14px;font-family:var(--mono);font-size:.76rem;overflow:auto;
+  white-space:pre-wrap;max-height:400px}
+
+/* ── Misc ── */
+.row{display:flex;align-items:center;gap:8px}.ml{margin-left:auto}
+.mt{margin-top:12px}.empty{text-align:center;padding:32px;color:var(--muted)}
+.loading{color:var(--muted);font-size:.82rem}.sep{margin:14px 0}
+.tag{display:inline-block;background:var(--surface3);border-radius:5px;
+  padding:2px 7px;font-size:.7rem;color:var(--muted);margin:1px}
+.section-h{display:flex;align-items:center;margin-bottom:14px}
+.section-h h2{margin:0}
+.hidden{display:none!important}
+
+/* ── Toast ── */
+.toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:9px;
+  font-size:.85rem;z-index:9999;display:none;animation:su .2s ease;
+  background:var(--surface2);border:1px solid var(--border)}
+.toast.ok{border-color:var(--accent2);color:var(--accent2)}
+.toast.err{border-color:var(--red);color:var(--red)}
+.toast.info{border-color:var(--accent);color:var(--accent)}
+@keyframes su{from{transform:translateY(16px);opacity:0}to{transform:translateY(0);opacity:1}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">⚡ VectorDB</div>
+  <div class="badge">v2</div>
+  <div class="spacer"></div>
+  <div id="hStatus"><span><span class="dot"></span>Connecting…</span></div>
+</header>
+
+<nav>
+  <button class="active" onclick="show('overview')">Overview</button>
+  <button onclick="show('collections')">Collections</button>
+  <button onclick="show('search')">🔍 Search</button>
+  <button onclick="show('upsert')">➕ Upsert</button>
+  <button onclick="show('browse')">Browse</button>
+  <button onclick="show('snapshots')">Snapshots</button>
+  <button onclick="show('metrics')">Metrics</button>
+</nav>
+
+<main>
+
+<!-- OVERVIEW -->
+<div id="panel-overview" class="panel active">
+  <div class="stats-row" id="statsRow">
+    <div class="stat"><div class="stat-num" id="st-cols">—</div><div class="stat-label">Collections</div></div>
+    <div class="stat"><div class="stat-num" id="st-vecs">—</div><div class="stat-label">Total Vectors</div></div>
+    <div class="stat"><div class="stat-num" id="st-srch">—</div><div class="stat-label">Searches</div></div>
+    <div class="stat"><div class="stat-num" id="st-ms">—</div><div class="stat-label">Avg Search ms</div></div>
+    <div class="stat"><div class="stat-num" id="st-hit">—</div><div class="stat-label">Cache Hit %</div></div>
+    <div class="stat"><div class="stat-num" id="st-ups">—</div><div class="stat-label">Upserts</div></div>
+  </div>
+  <div class="card">
+    <div class="section-h"><h2>Collections</h2>
+      <button class="btn btn-primary ml" onclick="show('collections')">Manage →</button></div>
+    <div class="table-wrap">
+      <table><thead><tr><th>Name</th><th>Dim</th><th>Vectors</th><th>Index</th><th>Distance</th><th>Size</th></tr></thead>
+      <tbody id="overviewTbody"><tr><td colspan="6" class="loading">Loading…</td></tr></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- COLLECTIONS -->
+<div id="panel-collections" class="panel">
+  <div class="section-h"><h2>Collections</h2>
+    <button class="btn btn-primary ml" onclick="toggleEl('cf')">+ New</button></div>
+  <div class="card hidden" id="cf">
+    <h2>Create Collection</h2>
+    <div class="form-grid">
+      <div class="fg"><label>Name *</label><input id="cn" placeholder="my_collection"></div>
+      <div class="fg"><label>Dimension</label><input id="cd" type="number" value="384"></div>
+      <div class="fg"><label>Distance</label>
+        <select id="cdist"><option value="cosine">cosine</option><option value="dot">dot</option></select></div>
+      <div class="fg"><label>Index type</label>
+        <select id="cidx"><option value="">Auto</option><option>Flat</option><option>IVF</option><option>HNSW</option></select></div>
+      <div class="fg"><label>HNSW M (graph edges)</label><input id="cm" type="number" placeholder="32"></div>
+      <div class="fg"><label>HNSW efConstruction</label><input id="cef" type="number" placeholder="64"></div>
+      <div class="fg full"><label>Description</label><input id="cdesc" placeholder="optional"></div>
+    </div>
+    <div class="row mt"><button class="btn btn-primary" onclick="createCol()">Create</button>
+      <button class="btn btn-ghost" onclick="toggleEl('cf')">Cancel</button></div>
+  </div>
+  <div class="card">
+    <div class="table-wrap">
+      <table><thead><tr><th>Name</th><th>Dim</th><th>Vectors</th><th>Index</th><th>Distance</th><th>Size</th><th>Actions</th></tr></thead>
+      <tbody id="colTbody"><tr><td colspan="7" class="loading">Loading…</td></tr></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- SEARCH -->
+<div id="panel-search" class="panel">
+  <div class="card">
+    <h2>Search Playground</h2>
+    <div class="form-grid">
+      <div class="fg"><label>Collection</label><select id="srch-col"></select></div>
+      <div class="fg"><label>Mode</label>
+        <select id="srch-mode" onchange="updateSearchUI()">
+          <option value="vector">Vector (random demo)</option>
+          <option value="text">By text (embed)</option>
+          <option value="hybrid">Hybrid (vector + text RRF)</option>
+          <option value="by-id">By ID</option>
+        </select></div>
+      <div class="fg hidden" id="sg-text" style="grid-column:1/-1">
+        <label>Query text</label><input id="srch-text" placeholder="wireless noise-cancelling headphones…"></div>
+      <div class="fg hidden" id="sg-id">
+        <label>Vector ID</label><input id="srch-id" placeholder="vec_001"></div>
+      <div class="fg"><label>Top K</label><input id="srch-k" type="number" value="5" min="1" max="100"></div>
+      <div class="fg"><label>Score threshold</label><input id="srch-thresh" type="number" step="0.01" placeholder="0.0–1.0"></div>
+      <div class="fg"><label>efSearch (HNSW recall tuning)</label><input id="srch-ef" type="number" placeholder="64"></div>
+      <div class="fg"><label>Fusion (hybrid)</label>
+        <select id="srch-fusion"><option value="rrf">RRF (rank-based)</option><option value="weighted">Weighted scores</option></select></div>
+      <div class="fg full"><label>Metadata filter JSON</label>
+        <textarea id="srch-filter" placeholder='{"category":"electronics"}'></textarea></div>
+      <div class="fg full"><label>Options</label>
+        <label style="color:var(--text);cursor:pointer;display:flex;gap:8px;align-items:center">
+          <input type="checkbox" id="srch-mmr"> Use MMR (diversity-aware results)</label></div>
+    </div>
+    <div class="row mt">
+      <button class="btn btn-primary" onclick="runSearch()">Search</button>
+      <span id="srch-info" class="loading ml"></span>
+    </div>
+  </div>
+  <div id="srch-results"></div>
+</div>
+
+<!-- UPSERT -->
+<div id="panel-upsert" class="panel">
+  <div class="card">
+    <h2>Upsert Vector</h2>
+    <div class="form-grid">
+      <div class="fg"><label>Collection</label><select id="ups-col"></select></div>
+      <div class="fg"><label>Vector ID *</label><input id="ups-id" placeholder="my-doc-1"></div>
+      <div class="fg full"><label>Vector (comma-separated — leave blank for random)</label>
+        <textarea id="ups-vec" placeholder="0.12, -0.34, 0.56 … or leave blank"></textarea></div>
+      <div class="fg full"><label>Metadata JSON</label>
+        <textarea id="ups-meta">{"name":"Test Item","category":"demo"}</textarea></div>
+      <div class="fg"><label>TTL seconds (optional)</label><input id="ups-ttl" type="number" placeholder="3600"></div>
+    </div>
+    <div class="row mt"><button class="btn btn-primary" onclick="upsertVec()">Upsert</button></div>
+  </div>
+  <pre id="ups-resp" class="hidden"></pre>
+</div>
+
+<!-- BROWSE -->
+<div id="panel-browse" class="panel">
+  <div class="card">
+    <div class="row">
+      <div class="fg" style="width:200px"><label>Collection</label>
+        <select id="br-col" onchange="loadBrowse()"></select></div>
+      <div class="fg" style="width:80px;margin-left:10px"><label>Limit</label>
+        <input id="br-lim" type="number" value="20" min="1" max="100"></div>
+      <div class="fg" style="width:200px;margin-left:10px"><label>Filter JSON</label>
+        <input id="br-filter" placeholder='{"cat":"a"}'></div>
+      <button class="btn btn-ghost" style="margin-top:18px;margin-left:8px" onclick="loadBrowse()">↺</button>
+      <button class="btn btn-success" style="margin-top:18px;margin-left:4px" onclick="exportBrowse()">⬇ Export</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="table-wrap">
+      <table><thead><tr><th>ID</th><th>Metadata</th><th>Created</th><th>Expires</th><th></th></tr></thead>
+      <tbody id="brTbody"><tr><td colspan="5" class="empty">Select a collection</td></tr></tbody></table>
+    </div>
+    <div class="row mt hidden" id="br-pag">
+      <button class="btn btn-ghost" id="br-prev" onclick="brOff(-1)">← Prev</button>
+      <span id="br-page" style="color:var(--muted);font-size:.8rem;margin:0 12px"></span>
+      <button class="btn btn-ghost" id="br-next" onclick="brOff(1)">Next →</button>
+    </div>
+  </div>
+</div>
+
+<!-- SNAPSHOTS -->
+<div id="panel-snapshots" class="panel">
+  <div class="card">
+    <div class="section-h"><h2>Snapshots</h2></div>
+    <p style="color:var(--muted);font-size:.85rem;margin-bottom:14px">
+      Create a point-in-time backup of any collection. Snapshots are saved as .tar.gz archives.</p>
+    <div class="form-grid">
+      <div class="fg"><label>Collection</label><select id="snap-col"></select></div>
+    </div>
+    <div class="row mt">
+      <button class="btn btn-primary" onclick="createSnap()">Create Snapshot</button>
+      <button class="btn btn-ghost" onclick="downloadSnap()">⬇ Download Latest</button>
+    </div>
+  </div>
+  <pre id="snap-resp" class="hidden"></pre>
+</div>
+
+<!-- METRICS -->
+<div id="panel-metrics" class="panel">
+  <div class="card">
+    <div class="section-h"><h2>Live Metrics</h2>
+      <button class="btn btn-ghost ml" onclick="loadMetrics()">↺ Refresh</button>
+      <button class="btn btn-primary" onclick="forceSave()">💾 Force Save</button>
+      <button class="btn btn-ghost" onclick="clearCache()">🗑 Clear Cache</button>
+    </div>
+
+    <div id="met-bars" class="bar-chart"></div>
+    <div class="sep" style="border-top:1px solid var(--border)"></div>
+    <h2 style="margin-top:14px">Raw JSON</h2>
+    <pre id="met-raw">Loading…</pre>
+  </div>
+</div>
+
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+// Config
+const ADMIN = 'admin-secret', USER = 'user-secret';
+const h = (admin=false) => ({'Content-Type':'application/json','X-API-Key':admin?ADMIN:USER});
+let _cols=[];
+let brOffset=0, brTotal=0;
+
+async function api(method, path, body, admin=false){
+  const opts={method,headers:h(admin)};
+  if(body!==undefined) opts.body=JSON.stringify(body);
+  const r=await fetch(path,opts);
+  if(r.status===204)return null;
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.detail||JSON.stringify(d));
+  return d;
+}
+const GET=(p,a)=>api('GET',p,undefined,a);
+const POST=(p,b,a)=>api('POST',p,b,a);
+const DEL=(p,a)=>api('DELETE',p,undefined,a);
+
+function toast(msg,type='ok'){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.className='toast '+type;el.style.display='block';
+  setTimeout(()=>el.style.display='none',3000);
+}
+
+function show(name){
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  const labels=['overview','collections','search','upsert','browse','snapshots','metrics'];
+  const btns=document.querySelectorAll('nav button');
+  btns[labels.indexOf(name)]?.classList.add('active');
+  const loaders={overview:loadOverview,collections:loadCols,
+    search:()=>fillSel('srch-col'),upsert:()=>fillSel('ups-col'),
+    browse:()=>{fillSel('br-col');loadBrowse()},
+    snapshots:()=>fillSel('snap-col'),metrics:loadMetrics};
+  loaders[name]?.();
+}
+
+function toggleEl(id){
+  const el=document.getElementById(id);
+  el.classList.toggle('hidden');
+}
+
+// ── Collections ────────────────────────────────────────────────────────────
+async function loadCols(){
+  try{
+    _cols=await GET('/collections');
+    const tb=document.getElementById('colTbody');
+    if(!_cols.length){tb.innerHTML='<tr><td colspan="7" class="empty">No collections yet</td></tr>';return;}
+    tb.innerHTML=_cols.map(c=>`<tr>
+      <td><strong>${c.name}</strong></td><td>${c.dimension}</td>
+      <td>${c.vector_count.toLocaleString()}</td>
+      <td><span class="pill p-${c.index_type.toLowerCase()}">${c.index_type}</span></td>
+      <td><span class="pill p-cos">${c.distance}</span></td>
+      <td>${fmtBytes(c.disk_size_bytes)}</td>
+      <td class="row" style="gap:4px">
+        <button class="btn btn-ghost" style="padding:4px 8px;font-size:.75rem"
+          onclick="rebuildCol('${c.name}')">↺ Rebuild</button>
+        <button class="btn btn-danger" style="padding:4px 8px;font-size:.75rem"
+          onclick="delCol('${c.name}')">Delete</button>
+      </td></tr>`).join('');
+  }catch(e){toast(e.message,'err')}
+}
+
+async function createCol(){
+  const name=document.getElementById('cn').value.trim();
+  if(!name){toast('Name required','err');return;}
+  const body={name,dimension:+document.getElementById('cd').value,
+    distance:document.getElementById('cdist').value,
+    description:document.getElementById('cdesc').value};
+  const idx=document.getElementById('cidx').value;
+  if(idx)body.index_type=idx;
+  const m=document.getElementById('cm').value;
+  if(m)body.hnsw_m=+m;
+  const ef=document.getElementById('cef').value;
+  if(ef)body.hnsw_ef_construction=+ef;
+  try{await POST('/collections',body,true);toast(`Created '${name}'`);toggleEl('cf');loadCols();}
+  catch(e){toast(e.message,'err')}
+}
+
+async function delCol(name){
+  if(!confirm(`Delete '${name}'? Cannot be undone.`))return;
+  try{await DEL(`/collections/${name}`,true);toast(`Deleted '${name}'`);loadCols();}
+  catch(e){toast(e.message,'err')}
+}
+
+async function rebuildCol(name){
+  try{const r=await POST(`/admin/collections/${name}/rebuild`,{},true);
+    toast(`Rebuild started → task ${r.task_id}`,'info');loadCols();}
+  catch(e){toast(e.message,'err')}
+}
+
+// ── Overview ───────────────────────────────────────────────────────────────
+async function loadOverview(){
+  try{
+    const[cols,met]=await Promise.all([GET('/collections'),GET('/admin/metrics')]);
+    _cols=cols;
+    document.getElementById('st-cols').textContent=cols.length;
+    document.getElementById('st-vecs').textContent=cols.reduce((s,c)=>s+c.vector_count,0).toLocaleString();
+    document.getElementById('st-srch').textContent=met.searches.toLocaleString();
+    document.getElementById('st-ms').textContent=met.avg_search_ms+'ms';
+    const cr=met.cache||{};
+    document.getElementById('st-hit').textContent=
+      cr.hit_rate!==undefined?(cr.hit_rate*100).toFixed(1)+'%':'—';
+    document.getElementById('st-ups').textContent=met.upserts.toLocaleString();
+
+    const tb=document.getElementById('overviewTbody');
+    if(!cols.length){tb.innerHTML='<tr><td colspan="6" class="empty">No collections</td></tr>';return;}
+    tb.innerHTML=cols.map(c=>`<tr>
+      <td><strong>${c.name}</strong></td><td>${c.dimension}</td>
+      <td>${c.vector_count.toLocaleString()}</td>
+      <td><span class="pill p-${c.index_type.toLowerCase()}">${c.index_type}</span></td>
+      <td><span class="pill p-cos">${c.distance}</span></td>
+      <td>${fmtBytes(c.disk_size_bytes)}</td></tr>`).join('');
+
+    document.getElementById('hStatus').innerHTML=
+      `<span><span class="dot"></span>Online</span>`+
+      `<span>${cols.length} collections · ${cols.reduce((s,c)=>s+c.vector_count,0).toLocaleString()} vectors</span>`+
+      `<span>${met.avg_search_ms}ms avg</span>`;
+  }catch(e){
+    document.getElementById('hStatus').innerHTML='<span style="color:var(--red)">⚠ Cannot connect</span>';
+    toast(e.message,'err');
+  }
+}
+
+// ── Search ─────────────────────────────────────────────────────────────────
+function updateSearchUI(){
+  const mode=document.getElementById('srch-mode').value;
+  document.getElementById('sg-text').classList.toggle('hidden',!['text','hybrid'].includes(mode));
+  document.getElementById('sg-id').classList.toggle('hidden',mode!=='by-id');
+}
+
+async function runSearch(){
+  const col=document.getElementById('srch-col').value;
+  const mode=document.getElementById('srch-mode').value;
+  const topK=+document.getElementById('srch-k').value||5;
+  const thresh=parseFloat(document.getElementById('srch-thresh').value)||null;
+  const ef=+document.getElementById('srch-ef').value||null;
+  const fusion=document.getElementById('srch-fusion').value;
+  const mmr=document.getElementById('srch-mmr').checked;
+  let filter=null;
+  const fv=document.getElementById('srch-filter').value.trim();
+  if(fv){try{filter=JSON.parse(fv)}catch{toast('Invalid filter JSON','err');return;}}
+
+  if(!col){toast('Select a collection','err');return;}
+  document.getElementById('srch-info').textContent='Searching…';
+
+  try{
+    let result;
+    const t0=performance.now();
+    const colInfo=_cols.find(c=>c.name===col);
+    const dim=colInfo?.dimension||384;
+
+    if(mode==='text'){
+      const text=document.getElementById('srch-text').value.trim();
+      if(!text){toast('Enter query text','err');return;}
+      result=await POST(`/collections/${col}/search/by-text`,
+        {text,top_k:topK,filter,include_vector:false});
+    }else if(mode==='hybrid'){
+      const text=document.getElementById('srch-text').value.trim();
+      if(!text){toast('Enter text for hybrid search','err');return;}
+      result=await POST(`/collections/${col}/search/hybrid`,
+        {vector:rndVec(dim),text,top_k:topK,vector_weight:0.7,filter,fusion});
+    }else if(mode==='by-id'){
+      const id=document.getElementById('srch-id').value.trim();
+      if(!id){toast('Enter a vector ID','err');return;}
+      result=await POST(`/collections/${col}/search/by-id`,{id,top_k:topK,filter});
+    }else{
+      result=await POST(`/collections/${col}/search`,
+        {vector:rndVec(dim),top_k:topK,filter,score_threshold:thresh,
+         ef_search:ef,use_mmr:mmr,mmr_lambda:0.5});
+    }
+
+    const ms=result.query_time_ms||(performance.now()-t0).toFixed(1);
+    document.getElementById('srch-info').textContent=
+      `${result.total_returned} result${result.total_returned!==1?'s':''} in ${ms}ms`
+      +(result.cached?' ⚡ cached':'');
+    renderResults(result.results,result.cached);
+  }catch(e){
+    document.getElementById('srch-info').textContent='';
+    toast(e.message,'err');
+  }
+}
+
+function renderResults(results,cached){
+  const el=document.getElementById('srch-results');
+  if(!results.length){el.innerHTML='<div class="empty">No results</div>';return;}
+  el.innerHTML='<div class="result-list">'+results.map((r,i)=>`
+    <div class="result-item">
+      <div class="result-rank">#${i+1}</div>
+      <div class="result-body">
+        <div><span class="result-id">${r.id}</span>
+             <span class="result-score">${r.score.toFixed(4)}</span>
+             ${cached?'<span class="result-cached">⚡</span>':''}</div>
+        <div class="result-meta">${JSON.stringify(r.metadata)}</div>
+      </div>
+    </div>`).join('')+'</div>';
+}
+
+// ── Upsert ─────────────────────────────────────────────────────────────────
+async function upsertVec(){
+  const col=document.getElementById('ups-col').value;
+  const id=document.getElementById('ups-id').value.trim();
+  if(!col||!id){toast('Collection and ID required','err');return;}
+  const metaStr=document.getElementById('ups-meta').value.trim();
+  let metadata={};
+  try{metadata=metaStr?JSON.parse(metaStr):{}}catch{toast('Invalid metadata JSON','err');return;}
+  const vecStr=document.getElementById('ups-vec').value.trim();
+  const colInfo=_cols.find(c=>c.name===col);
+  const dim=colInfo?.dimension||384;
+  const vector=vecStr?vecStr.split(',').map(s=>parseFloat(s.trim())):rndVec(dim);
+  const ttl=+document.getElementById('ups-ttl').value||null;
+  const body={id,vector,metadata};if(ttl)body.ttl_seconds=ttl;
+  try{
+    const r=await POST(`/collections/${col}/vectors`,body);
+    const pre=document.getElementById('ups-resp');
+    pre.textContent=JSON.stringify(r,null,2);pre.classList.remove('hidden');
+    toast(`Vector '${id}' ${r.status}`);
+  }catch(e){toast(e.message,'err')}
+}
+
+// ── Browse ─────────────────────────────────────────────────────────────────
+async function loadBrowse(){
+  const col=document.getElementById('br-col').value;
+  const lim=+document.getElementById('br-lim').value||20;
+  if(!col)return;
+  let filter=null;
+  const fv=document.getElementById('br-filter').value.trim();
+  if(fv){try{filter=JSON.parse(fv)}catch{toast('Invalid filter','err');return;}}
+
+  try{
+    const url=`/collections/${col}/vectors/scroll?limit=${lim}&offset=${brOffset}`
+      +(filter?`&filter=${encodeURIComponent(JSON.stringify(filter))}`:'');
+    const r=await GET(url);
+    brTotal=r.total;
+    const tb=document.getElementById('brTbody');
+    if(!r.vectors.length){tb.innerHTML='<tr><td colspan="5" class="empty">No vectors</td></tr>';
+      document.getElementById('br-pag').classList.add('hidden');return;}
+    tb.innerHTML=r.vectors.map(v=>`<tr>
+      <td><span style="font-family:var(--mono);font-size:.77rem">${v.id}</span>
+          ${v.expires_at?'<span class="tag">⏱ TTL</span>':''}</td>
+      <td style="max-width:280px;font-size:.77rem;color:var(--muted)">${JSON.stringify(v.metadata).slice(0,100)}</td>
+      <td style="font-size:.73rem;color:var(--muted);white-space:nowrap">${v.created_at?.slice(0,10)}</td>
+      <td style="font-size:.73rem;color:var(--yellow)">${v.expires_at?v.expires_at.slice(0,16).replace('T',' '):'—'}</td>
+      <td><button class="btn btn-danger" style="padding:3px 8px;font-size:.72rem"
+          onclick="delVec('${col}','${v.id}')">×</button></td></tr>`).join('');
+    const pag=document.getElementById('br-pag');
+    pag.classList.remove('hidden');
+    document.getElementById('br-page').textContent=
+      `${brOffset+1}–${Math.min(brOffset+lim,brTotal)} of ${brTotal.toLocaleString()}`;
+    document.getElementById('br-prev').disabled=brOffset===0;
+    document.getElementById('br-next').disabled=!r.has_more;
+  }catch(e){toast(e.message,'err')}
+}
+
+function brOff(dir){const lim=+document.getElementById('br-lim').value||20;
+  brOffset=Math.max(0,brOffset+dir*lim);loadBrowse();}
+
+async function delVec(col,id){
+  try{await DEL(`/collections/${col}/vectors/${id}`);toast(`Deleted '${id}'`);loadBrowse();}
+  catch(e){toast(e.message,'err')}
+}
+
+function exportBrowse(){
+  // Export current browse data to JSON
+  const rows=document.querySelectorAll('#brTbody tr');
+  if(!rows.length){toast('No data to export','err');return;}
+  const data=[];
+  rows.forEach(row=>{
+    const cells=row.querySelectorAll('td');
+    if(cells[0])data.push({id:cells[0].textContent.trim(),metadata:cells[1]?.textContent?.trim()});
+  });
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='vectors.json';a.click();
+  toast('Exported to vectors.json');
+}
+
+// ── Snapshots ──────────────────────────────────────────────────────────────
+async function createSnap(){
+  const col=document.getElementById('snap-col').value;
+  if(!col){toast('Select a collection','err');return;}
+  try{const r=await POST(`/admin/collections/${col}/snapshot`,{},true);
+    const pre=document.getElementById('snap-resp');
+    pre.textContent=JSON.stringify(r,null,2);pre.classList.remove('hidden');
+    toast(`Snapshot created: ${r.vector_count} vectors, ${fmtBytes(r.size_bytes)}`);}
+  catch(e){toast(e.message,'err')}
+}
+
+async function downloadSnap(){
+  const col=document.getElementById('snap-col').value;
+  if(!col){toast('Select a collection','err');return;}
+  const a=document.createElement('a');
+  a.href=`/admin/collections/${col}/snapshot/download`;
+  a.download=`${col}_snapshot.tar.gz`;a.click();
+}
+
+// ── Metrics ────────────────────────────────────────────────────────────────
+async function loadMetrics(){
+  try{
+    const m=await GET('/admin/metrics');
+    document.getElementById('met-raw').textContent=JSON.stringify(m,null,2);
+    const bars=[
+      {label:'Searches',val:m.searches,max:Math.max(m.searches,1)},
+      {label:'Upserts',val:m.upserts,max:Math.max(m.upserts,1)},
+      {label:'Deletes',val:m.deletes,max:Math.max(m.deletes,1)},
+      {label:'Cache hits',val:m.cache?.hits||0,max:Math.max(m.cache?.hits||0,1)},
+      {label:'Cache miss',val:m.cache?.misses||0,max:Math.max(m.cache?.misses||0,1)},
+    ];
+    const maxVal=Math.max(...bars.map(b=>b.val),1);
+    document.getElementById('met-bars').innerHTML=bars.map(b=>`
+      <div class="bar-row">
+        <div class="bar-label">${b.label}</div>
+        <div class="bar-wrap"><div class="bar-fill" style="width:${(b.val/maxVal*100).toFixed(1)}%"></div></div>
+        <div class="bar-val">${b.val.toLocaleString()}</div>
+      </div>`).join('');
+  }catch(e){toast(e.message,'err')}
+}
+
+async function forceSave(){
+  try{await POST('/admin/save',{},true);toast('All indexes saved');}
+  catch(e){toast(e.message,'err')}
+}
+
+async function clearCache(){
+  try{await POST('/admin/cache/clear',{},true);toast('Cache cleared');}
+  catch(e){toast(e.message,'err')}
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+async function fillSel(selId){
+  try{
+    const cols=await GET('/collections');_cols=cols;
+    const sel=document.getElementById(selId);
+    const cur=sel.value;
+    sel.innerHTML=cols.length
+      ?cols.map(c=>`<option value="${c.name}">${c.name} (${c.dimension}d)</option>`).join('')
+      :'<option value="">No collections</option>';
+    if(cur)sel.value=cur;
+  }catch(e){}
+}
+
+function rndVec(dim){
+  const v=Array.from({length:dim},()=>Math.random()*2-1);
+  const n=Math.sqrt(v.reduce((s,x)=>s+x*x,0));
+  return v.map(x=>x/n);
+}
+
+function fmtBytes(b){
+  if(!b)return'0 B';
+  if(b<1024)return b+' B';
+  if(b<1048576)return(b/1024).toFixed(1)+' KB';
+  return(b/1048576).toFixed(1)+' MB';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────
+(async()=>{
+  try{const h=await GET('/admin/health');
+    document.getElementById('hStatus').innerHTML=
+      `<span><span class="dot"></span>Online v${h.version}</span>`+
+      `<span>${h.collections} collections</span>`+
+      `<span>${h.total_vectors.toLocaleString()} vectors</span>`;}
+  catch{document.getElementById('hStatus').innerHTML='<span style="color:var(--red)">⚠ Offline</span>';}
+  loadOverview();
+})();
+</script>
+</body>
+</html>

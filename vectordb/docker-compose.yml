@@ -1,0 +1,33 @@
+version: '3.9'
+
+services:
+  vectordb:
+    build: .
+    container_name: vectordb
+    ports:
+      - "8000:8000"
+    volumes:
+      - vectordb_data:/app/data
+    environment:
+      - VDB_DATA_DIR=/app/data
+      - VDB_ADMIN_KEY=admin-secret
+      - VDB_USER_KEYS=user-secret,readonly-key
+      - VDB_DIMENSION=384
+      - VDB_AUTO_SCALE=true
+      - VDB_FLAT_THRESHOLD=10000
+      - VDB_HNSW_THRESHOLD=100000
+      - VDB_AUTO_SAVE=100
+      - VDB_REAPER_INTERVAL=60
+      - VDB_RATE_LIMIT_RPM=1000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/admin/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  vectordb_data:
+    driver: local
