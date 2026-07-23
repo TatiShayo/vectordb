@@ -2,7 +2,7 @@
 from __future__ import annotations
 import json, logging, os, sqlite3, threading
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -286,11 +286,20 @@ def _row(row: sqlite3.Row, include_vector: bool) -> Dict:
     d.pop("sparse_vector", None)
     return d
 
+# Allowlist of filterable metadata fields — prevents SQL injection via f-string
+_ALLOWED_FILTER_FIELDS: Set[str] = {
+    "category", "type", "status", "source", "language", "difficulty",
+    "author", "year", "genre", "topic", "format", "version", "level",
+}
+
 def _filter_clause(filter_dict: Optional[Dict]) -> Tuple[str, List]:
     if not filter_dict:
         return "", []
     conds, params = [], []
     for k, v in filter_dict.items():
+        if k not in _ALLOWED_FILTER_FIELDS:
+            raise ValueError(f"Invalid filter field: {k!r}. Allowed: {sorted(_ALLOWED_FILTER_FIELDS)}")
+        # Safe: k validated against allowlist before interpolation
         conds.append(f"json_extract(metadata,'$.{k}')=?")
         params.append(v)
     return "WHERE " + " AND ".join(conds), params

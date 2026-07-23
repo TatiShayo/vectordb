@@ -4,8 +4,9 @@ VectorDB Python Client Library
 A clean, type-safe client for VectorDB.
 
 Sync usage:
+    import os
     from client import VectorDBClient
-    db = VectorDBClient("http://localhost:8000", api_key="user-secret")
+    db = VectorDBClient("http://localhost:8000", api_key=os.environ.get("VECTORDB_API_KEY"))
     db.upsert("products", "id1", vector=[...], metadata={"name": "Widget"})
     results = db.search("products", vector=[...], top_k=5)
 
@@ -18,6 +19,7 @@ Async usage:
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Dict, List, Optional
 
 
@@ -31,16 +33,18 @@ class VectorDBClient:
 
     Args:
         base_url: Server URL (default http://localhost:8000)
-        api_key:  API key (default "user-secret")
+        api_key:  API key (default reads VECTORDB_API_KEY env var, falls back to "user-secret")
         timeout:  Request timeout seconds (default 30)
     """
 
     def __init__(
         self,
         base_url: str = "http://localhost:8000",
-        api_key: str = "user-secret",
+        api_key: Optional[str] = None,
         timeout: float = 30.0,
     ):
+        if api_key is None:
+            api_key = os.environ.get("VECTORDB_API_KEY", "user-secret")
         try:
             import httpx
         except ImportError:
