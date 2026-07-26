@@ -1,0 +1,9 @@
+{
+  "schema": "hermes.tests.v4",
+  "run_id": "hermes-2026-07-25-vectordb",
+  "status": "pass",
+  "counts": {
+    "passed": 12,
+    "failed": 0
+  }
+}
