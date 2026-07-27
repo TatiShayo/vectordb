@@ -3,7 +3,7 @@
   "run_id": "hermes-2026-07-27-v6-vectordb",
   "project": "vectordb",
   "phase": "4.0",
-  "produced_at": "2026-07-27T23:31:25.223523",
+  "produced_at": "2026-07-27T23:33:53.364304",
   "runner_tier": "T1",
   "mode": "static-only",
   "findings": [
