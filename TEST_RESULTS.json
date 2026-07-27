@@ -2,7 +2,7 @@
   "schema": "hermes.tests.v6",
   "run_id": "hermes-2026-07-27-v6-vectordb",
   "project": "vectordb",
-  "produced_at": "2026-07-27T22:39:49.741462",
+  "produced_at": "2026-07-27T23:28:16.272514",
   "summary": {
     "status": "UNRUNNABLE_NO_SCRIPT",
     "passed": 0,
