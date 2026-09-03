@@ -46,7 +46,7 @@ This is an API/backend project. No frontend to audit. The admin dashboard (if an
 
 ## 🔧 Session: 2026-07-14 — Multi-Agent Deep Audit Sweep (Round 1)
 
-**Status:** Not audited in this round. Previously fixed (July 5): `require_auth_with_audit` rewritten as real FastAPI dependency (was broken dead code). Sweep Round 2 will cover Tier 3.
+**Status:** Not audited in this round. Previously fixed (July 5): `requiyour_resend_api_key_here` rewritten as real FastAPI dependency (was broken dead code). Sweep Round 2 will cover Tier 3.
 
 | Category | Package | Issue | Fix |
 |----------|---------|-------|-----|
