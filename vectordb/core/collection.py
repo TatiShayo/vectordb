@@ -1,16 +1,18 @@
 """
-Collection — coordinates FAISS + SQLite + sparse index + cache.
+Collection — coordinates FAISS + SQLite + sparse index + cache + rich filtering.
 """
 from __future__ import annotations
-import logging, os, threading
+import logging
+import os
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from core.indexer import FAISSIndex, IndexType, _auto_type
-from core.sparse import SparseIndex, rrf_fuse
-from storage.db import CollectionDB
+from core.sparse import SparseIndex, linear_weighted_fuse, rrf_fuse
+from storage.db import CollectionDB, match_filter
 from storage.checkpointer import save as _save, load_or_rebuild
 from utils.normalize import prepare_vector, prepare_batch
 from utils.cache import get_cache
@@ -25,15 +27,24 @@ logger = logging.getLogger(__name__)
 
 class Collection:
     def __init__(
-        self, name, data_dir, dimension=384, distance="cosine",
-        index_type=None, quant_mode="float32", description="",
-        hnsw_m=None, hnsw_ef_construction=None,
-        created_at=None, updated_at=None,
-        ivfpq_m=None, ivfpq_nbits=None,
+        self,
+        name: str,
+        data_dir: str,
+        dimension: int = 384,
+        distance: str = "cosine",
+        index_type: Optional[str] = None,
+        quant_mode: str = "float32",
+        description: str = "",
+        hnsw_m: Optional[int] = None,
+        hnsw_ef_construction: Optional[int] = None,
+        created_at: Optional[str] = None,
+        updated_at: Optional[str] = None,
+        ivfpq_m: Optional[int] = None,
+        ivfpq_nbits: Optional[int] = None,
     ):
         self.name = name
         self.dimension = dimension
-        self.distance = distance
+        self.distance = distance.lower()
         self.quant_mode = quant_mode
         self.description = description
         self.hnsw_m = hnsw_m or HNSW_M
@@ -47,7 +58,7 @@ class Collection:
         self._dir = Path(data_dir) / name
         self._dir.mkdir(parents=True, exist_ok=True)
         self._index_path = str(self._dir / "index.faiss")
-        self._db_path    = str(self._dir / "metadata.db")
+        self._db_path = str(self._dir / "metadata.db")
         self._centroids_path = self._dir / "centroids.npy"
 
         centroids = None
@@ -57,13 +68,17 @@ class Collection:
             except Exception as exc:
                 logger.error(f"Failed to load centroids from {self._centroids_path}: {exc}")
 
-        self._index  = FAISSIndex(dimension, self._desired_itype or IndexType.FLAT,
-                                  hnsw_m=self.hnsw_m,
-                                  hnsw_ef_construction=self.hnsw_ef_construction,
-                                  ivfpq_m=self.ivfpq_m,
-                                  ivfpq_nbits=self.ivfpq_nbits,
-                                  centroids=centroids)
-        self._db     = CollectionDB(self._db_path)
+        self._index = FAISSIndex(
+            dimension,
+            self._desired_itype or IndexType.FLAT,
+            distance=self.distance,
+            hnsw_m=self.hnsw_m,
+            hnsw_ef_construction=self.hnsw_ef_construction,
+            ivfpq_m=self.ivfpq_m,
+            ivfpq_nbits=self.ivfpq_nbits,
+            centroids=centroids,
+        )
+        self._db = CollectionDB(self._db_path)
         self._sparse = SparseIndex()
         self._op_count = 0
         self._deleted_count = 0
@@ -78,15 +93,21 @@ class Collection:
         self._load_sparse()
 
     # ── Upsert ────────────────────────────────────────────────────────────────
-    def upsert(self, vec_id, raw_vector, metadata, ttl_seconds=None,
-               sparse_vector=None):
+    def upsert(
+        self,
+        vec_id: str,
+        raw_vector: Union[Sequence[float], np.ndarray],
+        metadata: Dict[str, Any],
+        ttl_seconds: Optional[int] = None,
+        sparse_vector: Optional[Dict] = None,
+    ) -> str:
         if self._closed:
             raise RuntimeError("Collection is closed")
         with self._write_lock:
             normalize = (self.distance == "cosine")
             vec = prepare_vector(raw_vector, normalize)
             if len(vec) != self.dimension:
-                raise ValueError(f"Vector dim {len(vec)} ≠ {self.dimension}")
+                raise ValueError(f"Vector dim {len(vec)} != {self.dimension}")
 
             old_fid = self._db.get_faiss_id(vec_id)
             if old_fid is not None:
@@ -94,13 +115,11 @@ class Collection:
                 self._sparse.remove(vec_id)
 
             [faiss_id] = self._db.next_faiss_ids(1)
-            status = self._db.upsert(vec_id, faiss_id, vec, metadata,
-                                     ttl_seconds, sparse_vector)
-            self._index.add(vec.reshape(1,-1), np.array([faiss_id], dtype=np.int64))
+            status = self._db.upsert(vec_id, faiss_id, vec, metadata, ttl_seconds, sparse_vector)
+            self._index.add(vec.reshape(1, -1), np.array([faiss_id], dtype=np.int64))
 
             if sparse_vector:
-                sv = dict(zip(sparse_vector.get("indices",[]),
-                              sparse_vector.get("values",[])))
+                sv = dict(zip(sparse_vector.get("indices", []), sparse_vector.get("values", [])))
                 self._sparse.add(vec_id, sv)
 
             if CACHE_ENABLED:
@@ -108,7 +127,7 @@ class Collection:
             self._on_write()
             return status
 
-    def upsert_batch(self, items):
+    def upsert_batch(self, items: List[Dict[str, Any]]) -> Tuple[int, int]:
         if self._closed:
             raise RuntimeError("Collection is closed")
         with self._write_lock:
@@ -136,8 +155,9 @@ class Collection:
                     vec = np.zeros(self.dimension, dtype=np.float32)
                 vectors_list.append(vec)
                 sv = item.get("sparse_vector")
-                db_items.append((item["id"], fid, vec, item.get("metadata",{}),
-                                 item.get("ttl_seconds"), sv))
+                db_items.append(
+                    (item["id"], fid, vec, item.get("metadata", {}), item.get("ttl_seconds"), sv)
+                )
 
             inserted, updated = self._db.upsert_batch(db_items)
             mat = np.vstack(vectors_list).astype(np.float32)
@@ -147,8 +167,7 @@ class Collection:
             for item, fid in zip(items, faiss_ids):
                 sv = item.get("sparse_vector")
                 if sv:
-                    self._sparse.add(item["id"],
-                        dict(zip(sv.get("indices",[]), sv.get("values",[]))))
+                    self._sparse.add(item["id"], dict(zip(sv.get("indices", []), sv.get("values", []))))
 
             if CACHE_ENABLED:
                 get_cache().invalidate_collection(self.name)
@@ -156,22 +175,32 @@ class Collection:
             return inserted, updated
 
     # ── Search ────────────────────────────────────────────────────────────────
-    def search(self, query_vector, top_k=10, filter_dict=None,
-               include_vector=False, score_threshold=None,
-               ef_search=None, use_mmr=False, mmr_lambda=0.5):
+    def search(
+        self,
+        query_vector: Union[Sequence[float], np.ndarray],
+        top_k: int = 10,
+        filter_dict: Optional[Dict[str, Any]] = None,
+        include_vector: bool = False,
+        score_threshold: Optional[float] = None,
+        ef_search: Optional[int] = None,
+        use_mmr: bool = False,
+        mmr_lambda: float = 0.5,
+    ) -> Tuple[List[Dict[str, Any]], bool]:
         import time as _time
+
         t0 = _time.perf_counter()
 
         normalize = (self.distance == "cosine")
         q = prepare_vector(query_vector, normalize)
         if len(q) != self.dimension:
-            raise ValueError(f"Query dim {len(q)} ≠ {self.dimension}")
+            raise ValueError(f"Query dim {len(q)} != {self.dimension}")
 
         # Cache check
         if CACHE_ENABLED and not use_mmr:
             cached = get_cache().get(self.name, q, top_k, filter_dict)
             if cached is not None:
                 from utils.prometheus import prom
+
                 prom.cache_hits.inc()
                 return cached, True
 
@@ -181,8 +210,7 @@ class Collection:
         overfetch = max(top_k * OVERFETCH_FACTOR, MIN_OVERFETCH)
         faiss_ids, scores = self._index.search(q, overfetch)
 
-        results = self._assemble(faiss_ids, scores, top_k, filter_dict,
-                                 include_vector, score_threshold)
+        results = self._assemble(faiss_ids, scores, top_k, filter_dict, include_vector, score_threshold)
 
         # MMR post-processing
         if use_mmr and results:
@@ -190,8 +218,7 @@ class Collection:
 
         ms = (_time.perf_counter() - t0) * 1000
         if ms > SLOW_QUERY_MS:
-            logger.warning(f"Slow query on '{self.name}': {ms:.1f}ms "
-                           f"top_k={top_k} filter={filter_dict}")
+            logger.warning(f"Slow query on '{self.name}': {ms:.1f}ms top_k={top_k} filter={filter_dict}")
 
         if ef_search:
             self._index.set_ef_search(HNSW_EF_SEARCH)
@@ -199,22 +226,29 @@ class Collection:
         if CACHE_ENABLED and not use_mmr:
             get_cache().put(self.name, q, top_k, results, filter_dict)
             from utils.prometheus import prom
+
             prom.cache_misses.inc()
 
         return results, False
 
-    def search_by_id(self, vec_id, top_k=10, filter_dict=None,
-                     include_vector=False):
+    def search_by_id(
+        self, vec_id: str, top_k: int = 10, filter_dict: Optional[Dict] = None, include_vector: bool = False
+    ) -> Tuple[List[Dict], bool]:
         record = self._db.get(vec_id, include_vector=True)
         if record is None:
             raise KeyError(f"Vector '{vec_id}' not found")
-        results, cached = self.search(record["vector"], top_k,
-                                      filter_dict, include_vector)
-        return results, cached
+        return self.search(record["vector"], top_k, filter_dict, include_vector)
 
-    def hybrid_search(self, query_vector, text, top_k=10,
-                      vector_weight=0.7, filter_dict=None,
-                      include_vector=False, fusion="rrf"):
+    def hybrid_search(
+        self,
+        query_vector: Union[Sequence[float], np.ndarray],
+        text: str,
+        top_k: int = 10,
+        vector_weight: float = 0.7,
+        filter_dict: Optional[Dict] = None,
+        include_vector: bool = False,
+        fusion: str = "rrf",
+    ) -> List[Dict[str, Any]]:
         normalize = (self.distance == "cosine")
         q = prepare_vector(query_vector, normalize)
         overfetch = max(top_k * OVERFETCH_FACTOR, MIN_OVERFETCH)
@@ -230,57 +264,59 @@ class Collection:
 
         # Keyword candidates
         kw_ids = self._db.keyword_search(text, limit=500)
-        kw_ranked = [(vid, 1.0/(i+1)) for i, vid in enumerate(kw_ids)]
+        kw_ranked = [(vid, 1.0 / (i + 1)) for i, vid in enumerate(kw_ids)]
 
         if fusion == "rrf":
-            fused = rrf_fuse([dense_ranked, kw_ranked],
-                             weights=[vector_weight, 1-vector_weight])
-        else:  # weighted score fusion
-            score_map: Dict[str, float] = {}
-            for vid, sc in dense_ranked:
-                score_map[vid] = score_map.get(vid, 0) + vector_weight * sc
-            for rank, (vid, _) in enumerate(kw_ranked):
-                kw_sc = (len(kw_ranked)-rank) / max(len(kw_ranked), 1)
-                score_map[vid] = score_map.get(vid, 0) + (1-vector_weight)*kw_sc
-            fused = sorted(score_map.items(), key=lambda x: -x[1])
+            fused = rrf_fuse([dense_ranked, kw_ranked], weights=[vector_weight, 1.0 - vector_weight])
+        else:
+            # Linear weighted fusion with normalization
+            fused = linear_weighted_fuse(dense_ranked, kw_ranked, vector_weight=vector_weight)
 
         # Fetch records and apply filter
         results = []
-        for vid, score in fused[:top_k*OVERFETCH_FACTOR]:
+        for vid, score in fused[: top_k * OVERFETCH_FACTOR]:
             rec = self._db.get(vid, include_vector)
-            if rec and (not filter_dict or _match_filter(rec["metadata"], filter_dict)):
-                rec["score"] = score
+            if rec and (not filter_dict or match_filter(rec["metadata"], filter_dict)):
+                rec["score"] = float(score)
                 results.append(rec)
                 if len(results) >= top_k:
                     break
         return results
 
-    def search_sparse(self, sparse_vector_dict, top_k=10, filter_dict=None):
+    def search_sparse(
+        self, sparse_vector_dict: Dict[int, float], top_k: int = 10, filter_dict: Optional[Dict] = None
+    ) -> List[Dict[str, Any]]:
         """Search using sparse vector (inverted index)."""
         raw_results = self._sparse.search(sparse_vector_dict, top_k * 5)
         results = []
         for vid, score in raw_results:
             rec = self._db.get(vid, False)
-            if rec and (not filter_dict or _match_filter(rec["metadata"], filter_dict)):
-                rec["score"] = score
+            if rec and (not filter_dict or match_filter(rec["metadata"], filter_dict)):
+                rec["score"] = float(score)
                 results.append(rec)
                 if len(results) >= top_k:
                     break
         return results
 
-    def batch_search(self, queries, include_vector=False):
-        return [self.search(q["vector"], q.get("top_k",10),
-                            q.get("filter"), include_vector,
-                            q.get("score_threshold"))[0]
-                for q in queries]
+    def batch_search(self, queries: List[Dict[str, Any]], include_vector: bool = False) -> List[List[Dict]]:
+        return [
+            self.search(
+                q["vector"],
+                q.get("top_k", 10),
+                q.get("filter"),
+                include_vector,
+                q.get("score_threshold"),
+            )[0]
+            for q in queries
+        ]
 
     # ── CRUD ──────────────────────────────────────────────────────────────────
-    def get(self, vec_id, include_vector=False):
+    def get(self, vec_id: str, include_vector: bool = False) -> Optional[Dict]:
         if self._closed:
             raise RuntimeError("Collection is closed")
         return self._db.get(vec_id, include_vector)
 
-    def delete(self, vec_id):
+    def delete(self, vec_id: str) -> bool:
         if self._closed:
             raise RuntimeError("Collection is closed")
         with self._write_lock:
@@ -299,7 +335,7 @@ class Collection:
         self._db.close()
 
     def delete_by_filter(self, filter_dict: Dict) -> int:
-        """Bulk delete by metadata filter — D06."""
+        """Bulk delete by metadata filter."""
         if self._closed:
             raise RuntimeError("Collection is closed")
         with self._write_lock:
@@ -310,31 +346,31 @@ class Collection:
                     deleted += 1
             return deleted
 
-    def patch_metadata(self, vec_id, metadata: Dict) -> bool:
-        """Update only metadata, no re-indexing — D10."""
+    def patch_metadata(self, vec_id: str, metadata: Dict) -> bool:
+        """Update only metadata, no re-indexing."""
         if self._closed:
             raise RuntimeError("Collection is closed")
         return self._db.patch_metadata(vec_id, metadata)
 
-    def count(self, filter_dict=None) -> int:
-        """D07."""
+    def count(self, filter_dict: Optional[Dict] = None) -> int:
         if self._closed:
             raise RuntimeError("Collection is closed")
         return self._db.count_filtered(filter_dict)
 
     def facets(self, field: str, limit: int = 100) -> Dict[str, int]:
-        """D08 — distinct values + counts for a metadata field."""
         if self._closed:
             raise RuntimeError("Collection is closed")
         return self._db.facets(field, limit)
 
-    def scroll(self, limit=100, offset=0, filter_dict=None, include_vector=False):
+    def scroll(
+        self, limit: int = 100, offset: int = 0, filter_dict: Optional[Dict] = None, include_vector: bool = False
+    ) -> Tuple[List[Dict], int]:
         if self._closed:
             raise RuntimeError("Collection is closed")
         return self._db.scroll(limit, offset, filter_dict, include_vector)
 
     # ── Maintenance ───────────────────────────────────────────────────────────
-    def reap_expired(self):
+    def reap_expired(self) -> int:
         if self._closed:
             raise RuntimeError("Collection is closed")
         with self._write_lock:
@@ -345,14 +381,14 @@ class Collection:
                 self._maybe_rebuild()
             return len(fids)
 
-    def rebuild_index(self):
+    def rebuild_index(self) -> Dict[str, Any]:
         if self._closed:
             raise RuntimeError("Collection is closed")
         with self._write_lock:
             vectors, faiss_ids = self._db.all_vectors_for_rebuild()
             desired = self._desired_itype or _auto_type(len(faiss_ids))
-            logger.info(f"[{self.name}] Rebuilding → {desired} ({len(faiss_ids)} vecs)")
-            
+            logger.info(f"[{self.name}] Rebuilding -> {desired} ({len(faiss_ids)} vecs)")
+
             centroids = None
             if self._centroids_path.exists():
                 try:
@@ -360,10 +396,15 @@ class Collection:
                 except Exception as exc:
                     logger.error(f"Failed to load centroids from {self._centroids_path}: {exc}")
 
-            self._index.rebuild(vectors, faiss_ids, desired,
-                                ivfpq_m=self.ivfpq_m,
-                                ivfpq_nbits=self.ivfpq_nbits,
-                                centroids=centroids)
+            self._index.rebuild(
+                vectors,
+                faiss_ids,
+                desired,
+                ivfpq_m=self.ivfpq_m,
+                ivfpq_nbits=self.ivfpq_nbits,
+                centroids=centroids,
+                distance=self.distance,
+            )
             self._deleted_count = 0
             self._save_centroids_if_needed()
             self._save()
@@ -374,35 +415,48 @@ class Collection:
 
     # ── Properties ────────────────────────────────────────────────────────────
     @property
-    def vector_count(self):
+    def vector_count(self) -> int:
         return self._db.count()
 
     @property
-    def disk_size_bytes(self):
+    def disk_size_bytes(self) -> int:
         total = self._db.size_bytes()
-        try: total += os.path.getsize(self._index_path)
-        except OSError: pass
+        try:
+            total += os.path.getsize(self._index_path)
+        except OSError:
+            pass
         return total
 
     @property
-    def index_type(self):
+    def index_type(self) -> IndexType:
         return self._index.index_type
 
-    def to_dict(self):
+    def to_dict(self) -> Dict[str, Any]:
         return {
-            "name": self.name, "dimension": self.dimension,
-            "distance": self.distance, "quant_mode": self.quant_mode,
-            "index_type": self.index_type.value, "description": self.description,
+            "name": self.name,
+            "dimension": self.dimension,
+            "distance": self.distance,
+            "quant_mode": self.quant_mode,
+            "index_type": self.index_type.value,
+            "description": self.description,
             "hnsw_m": self.hnsw_m,
             "hnsw_ef_construction": self.hnsw_ef_construction,
             "ivfpq_m": self.ivfpq_m,
             "ivfpq_nbits": self.ivfpq_nbits,
-            "created_at": self.created_at, "updated_at": self.updated_at,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
         }
 
     # ── Internals ─────────────────────────────────────────────────────────────
-    def _assemble(self, faiss_ids, scores, top_k, filter_dict,
-                  include_vector, score_threshold):
+    def _assemble(
+        self,
+        faiss_ids: np.ndarray,
+        scores: np.ndarray,
+        top_k: int,
+        filter_dict: Optional[Dict],
+        include_vector: bool,
+        score_threshold: Optional[float],
+    ) -> List[Dict[str, Any]]:
         if not len(faiss_ids):
             return []
         if score_threshold is not None:
@@ -422,8 +476,9 @@ class Collection:
                 out.append(rec)
         return out
 
-    def _apply_mmr(self, q, results, top_k, lam):
+    def _apply_mmr(self, q: np.ndarray, results: List[Dict], top_k: int, lam: float) -> List[Dict]:
         from core.reranker import mmr
+
         if not results:
             return results
         vecs = []
@@ -446,7 +501,7 @@ class Collection:
         except Exception as exc:
             logger.warning(f"Could not load sparse index: {exc}")
 
-    def _on_write(self, n=1):
+    def _on_write(self, n: int = 1):
         self._op_count += n
         if self._op_count % AUTO_SAVE_INTERVAL == 0:
             self._save()
@@ -477,8 +532,5 @@ class Collection:
             _save(self._index, self._index_path)
 
 
-def _now():
+def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-def _match_filter(metadata, filter_dict):
-    return all(metadata.get(k) == v for k, v in filter_dict.items())

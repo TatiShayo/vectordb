@@ -135,6 +135,7 @@ def cmd_cache_clear(args): _pp(_req("POST", "/admin/cache/clear", admin=True))
 
 # ── Parser ────────────────────────────────────────────────────────────────────
 def main():
+    global BASE
     p = argparse.ArgumentParser(prog="vectordb", description="VectorDB CLI")
     p.add_argument("--url", default=BASE, help="Server URL")
     sub = p.add_subparsers(dest="group", required=True)
@@ -188,7 +189,6 @@ def main():
 
     args = p.parse_args()
     if args.url != BASE:
-        global BASE
         BASE = args.url
     args.func(args)
 

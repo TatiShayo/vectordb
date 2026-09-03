@@ -10,7 +10,12 @@ class IndexType(str, Enum):
     FLAT="Flat"; IVF="IVF"; HNSW="HNSW"; IVFPQ="IVFPQ"
 
 class DistanceMetric(str, Enum):
-    COSINE="cosine"; DOT="dot"
+    COSINE = "cosine"
+    DOT = "dot"
+    EUCLIDEAN = "euclidean"
+    L2 = "l2"
+    MANHATTAN = "manhattan"
+
 
 class QuantMode(str, Enum):
     FLOAT32="float32"; INT8="int8"; BINARY="binary"

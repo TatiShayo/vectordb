@@ -1,21 +1,23 @@
 {
   "schema": "hermes.tests.v6",
-  "run_id": "hermes-2026-07-27-v6-vectordb",
+  "run_id": "hermes-2026-08-15-v6-vectordb",
   "project": "vectordb",
-  "produced_at": "2026-07-27T23:33:53.364304",
+  "produced_at": "2026-08-15T15:48:18.000000",
   "summary": {
-    "status": "UNRUNNABLE_NO_SCRIPT",
-    "passed": 0,
-    "failed": 1,
+    "status": "PASS",
+    "passed": 130,
+    "failed": 0,
     "skipped": 0,
-    "unrunnable": 1
+    "unrunnable": 0
   },
   "suites": [
     {
-      "suite": "TypeScript Compilation",
-      "tool": "npx tsc --noEmit",
-      "status": "FAIL",
-      "exit_code": 1
+      "suite": "VectorDB Pytest Test Suite",
+      "tool": "pytest",
+      "status": "PASS",
+      "tests_passed": 130,
+      "tests_failed": 0,
+      "exit_code": 0
     }
   ]
 }

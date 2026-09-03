@@ -1,13 +1,9 @@
 """
-Snapshot API — C02/C03.
-Point-in-time export of a collection to a .tar.gz archive.
-Archives contain:
-  - index.faiss   (FAISS binary)
-  - metadata.db   (SQLite WAL-checkpointed)
-  - manifest.json (version, timestamp, collection settings)
+Snapshot API — Point-in-time export/import with SHA256 checksum integrity verification
+and corrupt snapshot recovery.
 """
 from __future__ import annotations
-
+import hashlib
 import json
 import logging
 import os
@@ -18,7 +14,7 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +22,19 @@ if TYPE_CHECKING:
     from core.collection import Collection
 
 
+def _file_sha256(filepath: Union[str, Path]) -> str:
+    """Compute SHA256 hex digest of a file."""
+    h = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        while chunk := f.read(65536):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def export_snapshot(col: "Collection", output_path: str) -> Dict:
     """
-    Export collection to a .tar.gz snapshot.
-    Returns manifest dict with metadata about the snapshot.
+    Export collection to a .tar.gz snapshot with SHA256 checksums.
+    Returns manifest dict with snapshot metadata.
     """
     t0 = time.time()
     with tempfile.TemporaryDirectory() as tmp:
@@ -38,28 +43,41 @@ def export_snapshot(col: "Collection", output_path: str) -> Dict:
         # 1. Force save FAISS index
         col.force_save()
 
-        # 2. Checkpoint SQLite WAL → main file before copying
+        # 2. Checkpoint SQLite WAL -> main file
         db_path = col._db.db_path
         _checkpoint_sqlite(db_path)
 
-        # 3. Copy files into temp dir
+        # 3. Copy files into temp dir and compute checksums
+        checksums: Dict[str, str] = {}
         index_src = Path(col._index_path)
         if index_src.exists():
-            shutil.copy2(index_src, tmp_dir / "index.faiss")
+            dest_index = tmp_dir / "index.faiss"
+            shutil.copy2(index_src, dest_index)
+            checksums["index.faiss"] = _file_sha256(dest_index)
 
-        shutil.copy2(db_path, tmp_dir / "metadata.db")
+        dest_db = tmp_dir / "metadata.db"
+        shutil.copy2(db_path, dest_db)
+        checksums["metadata.db"] = _file_sha256(dest_db)
 
-        # 4. Write manifest
+        centroids_src = Path(col._centroids_path)
+        if centroids_src.exists():
+            dest_cent = tmp_dir / "centroids.npy"
+            shutil.copy2(centroids_src, dest_cent)
+            checksums["centroids.npy"] = _file_sha256(dest_cent)
+
+        # 4. Write manifest with checksums
         manifest = {
-            "version": "1.0",
+            "version": "2.0",
             "created_at": datetime.now(timezone.utc).isoformat(),
             "collection": col.to_dict(),
             "vector_count": col.vector_count,
             "faiss_index_exists": index_src.exists(),
+            "checksums": checksums,
         }
         (tmp_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
         # 5. Pack into tar.gz
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         with tarfile.open(output_path, "w:gz") as tar:
             tar.add(tmp_dir, arcname="")
 
@@ -74,15 +92,63 @@ def export_snapshot(col: "Collection", output_path: str) -> Dict:
     return manifest
 
 
+def verify_snapshot(snapshot_path: str) -> Tuple[bool, str, Optional[Dict]]:
+    """
+    Verifies snapshot archive integrity and SHA256 checksums without modifying system state.
+    Returns (is_valid, message, manifest_dict).
+    """
+    if not os.path.exists(snapshot_path):
+        return False, f"Snapshot file not found: {snapshot_path}", None
+
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            with tarfile.open(snapshot_path, "r:gz") as tar:
+                for member in tar.getmembers():
+                    mpath = Path(member.name)
+                    if mpath.is_absolute() or member.name.startswith("/") or member.name.startswith("\\"):
+                        return False, f"Dangerous path in snapshot: {member.name}", None
+                    if ".." in mpath.parts or ".." in member.name.replace("\\", "/").split("/"):
+                        return False, f"Path traversal detected in snapshot: {member.name}", None
+                tar.extractall(tmp_dir)
+
+            manifest_file = tmp_dir / "manifest.json"
+            if not manifest_file.exists():
+                return False, "Missing manifest.json in snapshot archive", None
+
+            manifest = json.loads(manifest_file.read_text())
+            checksums = manifest.get("checksums", {})
+
+            # Verify checksums of extracted files
+            for fname, expected_hash in checksums.items():
+                target_file = tmp_dir / fname
+                if not target_file.exists():
+                    return False, f"Manifest file missing from archive: {fname}", manifest
+                actual_hash = _file_sha256(target_file)
+                if actual_hash != expected_hash:
+                    return False, f"Checksum mismatch for {fname}: expected {expected_hash}, got {actual_hash}", manifest
+
+            return True, "Snapshot verified successfully", manifest
+
+    except Exception as exc:
+        return False, f"Snapshot verification error: {exc}", None
+
+
 def import_snapshot(
     snapshot_path: str,
     target_data_dir: str,
     collection_name: str,
+    verify_checksums: bool = True,
 ) -> Dict:
     """
     Import a .tar.gz snapshot into target_data_dir/collection_name/.
-    Returns the manifest from the archive.
+    Validates manifest, checks integrity, and handles corrupted files gracefully.
     """
+    if verify_checksums:
+        is_valid, msg, _ = verify_snapshot(snapshot_path)
+        if not is_valid:
+            raise ValueError(f"Corrupt or invalid snapshot: {msg}")
+
     dest = Path(target_data_dir) / collection_name
     dest.mkdir(parents=True, exist_ok=True)
 
@@ -103,8 +169,8 @@ def import_snapshot(
 
         manifest = json.loads(manifest_file.read_text())
 
-        # Copy files to destination
-        for fname in ("index.faiss", "metadata.db"):
+        # Copy database and index files to destination
+        for fname in ("metadata.db", "index.faiss", "centroids.npy"):
             src = tmp_dir / fname
             if src.exists():
                 shutil.copy2(src, dest / fname)

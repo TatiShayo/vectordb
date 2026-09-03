@@ -1,21 +1,20 @@
 """
-Atomic persistence for FAISS indexes.
+Atomic persistence and crash recovery for FAISS indexes.
 
 Strategy:
   1. Write to a .tmp file in the same directory.
   2. os.replace() — atomic on POSIX, near-atomic on Windows (same FS).
-  3. SQLite is already crash-safe in WAL mode; we don't need to do anything.
+  3. SQLite is crash-safe in WAL mode.
 
-On startup:
-  - If the .faiss file exists, load it.
-  - If vector counts differ (crash happened mid-save), rebuild from SQLite.
+On startup / load:
+  - If the .faiss file exists, attempt to load it.
+  - If loading fails (file corrupt, truncated, invalid header) or vector count differs,
+    rebuild the index cleanly from the SQLite metadata.db database.
 """
 from __future__ import annotations
-
 import logging
 import os
 from pathlib import Path
-
 from core.indexer import FAISSIndex, IndexType
 
 logger = logging.getLogger(__name__)
@@ -26,16 +25,13 @@ def save(index: FAISSIndex, index_path: str) -> None:
     tmp = index_path + ".tmp"
     index.save(tmp)
     os.replace(tmp, index_path)
-    logger.debug(f"Saved FAISS index ({index.size} vectors) → {index_path}")
+    logger.debug(f"Saved FAISS index ({index.size} vectors) -> {index_path}")
 
 
-def load_or_rebuild(
-    index: FAISSIndex,
-    index_path: str,
-    db,  # CollectionDB instance
-) -> None:
+def load_or_rebuild(index: FAISSIndex, index_path: str, db) -> None:
     """
-    Load FAISS from disk; rebuild from SQLite if the file is missing or stale.
+    Load FAISS from disk; automatically recover and rebuild from SQLite
+    if the index file is missing, stale, or corrupted.
     """
     if Path(index_path).exists():
         try:
@@ -51,7 +47,7 @@ def load_or_rebuild(
                 logger.info(f"Loaded FAISS index: {index.size} vectors ({index.index_type})")
             return
         except Exception as exc:
-            logger.warning(f"Could not load FAISS index: {exc}. Rebuilding.")
+            logger.warning(f"Could not load FAISS index ({exc}). Initiating automatic recovery rebuild.")
 
     _rebuild_from_db(index, db)
 
@@ -64,7 +60,8 @@ def _rebuild_from_db(index: FAISSIndex, db) -> None:
         return
 
     from core.indexer import _auto_type
+
     best_type = _auto_type(n)
-    logger.info(f"Rebuilding index ({best_type}) from {n} SQLite vectors …")
+    logger.info(f"Rebuilding index ({best_type}) from {n} SQLite vectors ...")
     index.rebuild(vectors, faiss_ids, new_type=best_type)
     logger.info("Rebuild complete.")

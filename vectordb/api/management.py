@@ -144,17 +144,26 @@ def restore_snapshot(collection_name: str, snapshot_path: str,
     engine = get_engine()
     col_settings = manifest.get("collection", {})
     try:
-        engine.get(collection_name)
-        # Already exists — just reload
+        col = engine.get(collection_name)
+        from storage.checkpointer import load_or_rebuild
+        load_or_rebuild(col._index, col._index_path, col._db)
+        col._load_sparse()
     except KeyError:
         engine.create(
             name=collection_name,
             dimension=col_settings.get("dimension", 384),
             distance=col_settings.get("distance", "cosine"),
+            index_type=col_settings.get("index_type"),
+            quant_mode=col_settings.get("quant_mode", "float32"),
             description=col_settings.get("description", "Restored from snapshot"),
+            hnsw_m=col_settings.get("hnsw_m"),
+            hnsw_ef_construction=col_settings.get("hnsw_ef_construction"),
+            ivfpq_m=col_settings.get("ivfpq_m"),
+            ivfpq_nbits=col_settings.get("ivfpq_nbits"),
         )
     return {"status": "restored", "collection": collection_name,
             "vector_count": manifest.get("vector_count", 0)}
+
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 

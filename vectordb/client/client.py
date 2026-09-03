@@ -124,6 +124,27 @@ class VectorDBClient:
     def delete(self, collection: str, id: str) -> Dict:
         return self._delete(f"/collections/{collection}/vectors/{id}")
 
+    def count(self, collection: str) -> Dict:
+        return self._get(f"/collections/{collection}/vectors/count")
+
+    def facets(self, collection: str, field: str, limit: int = 100) -> Dict:
+        return self._get(
+            f"/collections/{collection}/vectors/facets/{field}",
+            params={"limit": limit},
+        )
+
+    def patch_metadata(self, collection: str, id: str, metadata: Dict[str, Any]) -> Dict:
+        return self._patch(
+            f"/collections/{collection}/vectors/{id}",
+            {"metadata": metadata},
+        )
+
+    def delete_by_filter(self, collection: str, filter_dict: Dict[str, Any]) -> Dict:
+        return self._delete_with_body(
+            f"/collections/{collection}/vectors/by-filter",
+            {"filter": filter_dict},
+        )
+
     def scroll(
         self,
         collection: str,
@@ -226,6 +247,28 @@ class VectorDBClient:
     def force_save(self) -> Dict:
         return self._post("/admin/save", {})
 
+    def clear_cache(self) -> Dict:
+        return self._post("/admin/cache/clear", {})
+
+    def cache_stats(self) -> Dict:
+        return self._get("/admin/cache/stats")
+
+    def create_snapshot(self, collection: str) -> Dict:
+        return self._post(f"/admin/collections/{collection}/snapshot", {})
+
+    def restore_snapshot(self, collection: str, snapshot_path: str) -> Dict:
+        return self._post(
+            f"/admin/collections/{collection}/restore",
+            params={"snapshot_path": snapshot_path},
+            body={},
+        )
+
+    def list_tasks(self) -> List[Dict]:
+        return self._get("/admin/tasks")
+
+    def get_task(self, task_id: str) -> Dict:
+        return self._get(f"/admin/tasks/{task_id}")
+
     # ── HTTP primitives ───────────────────────────────────────────────────────
 
     def _get(self, path: str, params: Optional[Dict] = None) -> Any:
@@ -233,13 +276,26 @@ class VectorDBClient:
         r.raise_for_status()
         return r.json()
 
-    def _post(self, path: str, body: Dict) -> Any:
-        r = self._client.post(path, json=body)
+    def _post(self, path: str, body: Dict = None, params: Optional[Dict] = None) -> Any:
+        r = self._client.post(path, json=body if body is not None else {}, params=params)
+        r.raise_for_status()
+        return r.json()
+
+    def _patch(self, path: str, body: Dict) -> Any:
+        r = self._client.patch(path, json=body)
         r.raise_for_status()
         return r.json()
 
     def _delete(self, path: str) -> Any:
         r = self._client.delete(path)
+        r.raise_for_status()
+        try:
+            return r.json()
+        except Exception:
+            return {}
+
+    def _delete_with_body(self, path: str, body: Dict) -> Any:
+        r = self._client.request("DELETE", path, json=body)
         r.raise_for_status()
         try:
             return r.json()
@@ -285,6 +341,31 @@ class AsyncVectorDBClient:
             timeout=timeout,
         )
 
+    async def create_collection(
+        self,
+        name: str,
+        dimension: int = 384,
+        distance: str = "cosine",
+        index_type: Optional[str] = None,
+        description: str = "",
+    ) -> Dict:
+        return await self._post("/collections", {
+            "name": name,
+            "dimension": dimension,
+            "distance": distance,
+            **({"index_type": index_type} if index_type else {}),
+            "description": description,
+        })
+
+    async def list_collections(self) -> List[Dict]:
+        return await self._get("/collections")
+
+    async def get_collection(self, name: str) -> Dict:
+        return await self._get(f"/collections/{name}")
+
+    async def delete_collection(self, name: str) -> None:
+        await self._delete(f"/collections/{name}")
+
     async def upsert(self, collection: str, id: str, vector: List[float], metadata: Optional[Dict] = None, ttl_seconds: Optional[int] = None) -> Dict:
         body: Dict[str, Any] = {"id": id, "vector": vector, "metadata": metadata or {}}
         if ttl_seconds:
@@ -294,6 +375,30 @@ class AsyncVectorDBClient:
     async def upsert_batch(self, collection: str, vectors: List[Dict]) -> Dict:
         return await self._post(f"/collections/{collection}/vectors/batch", {"vectors": vectors})
 
+    async def get(self, collection: str, id: str, include_vector: bool = False) -> Optional[Dict]:
+        return await self._get(
+            f"/collections/{collection}/vectors/{id}",
+            params={"include_vector": include_vector},
+        )
+
+    async def delete(self, collection: str, id: str) -> Dict:
+        return await self._delete(f"/collections/{collection}/vectors/{id}")
+
+    async def count(self, collection: str) -> Dict:
+        return await self._get(f"/collections/{collection}/vectors/count")
+
+    async def scroll(
+        self,
+        collection: str,
+        limit: int = 100,
+        offset: int = 0,
+        include_vector: bool = False,
+    ) -> Dict:
+        return await self._get(
+            f"/collections/{collection}/vectors/scroll",
+            params={"limit": limit, "offset": offset, "include_vector": include_vector},
+        )
+
     async def search(self, collection: str, vector: List[float], top_k: int = 10, filter: Optional[Dict] = None, include_vector: bool = False) -> List[Dict]:
         body: Dict[str, Any] = {"vector": vector, "top_k": top_k, "include_vector": include_vector}
         if filter:
@@ -301,11 +406,11 @@ class AsyncVectorDBClient:
         result = await self._post(f"/collections/{collection}/search", body)
         return result["results"]
 
-    async def delete(self, collection: str, id: str) -> Dict:
-        return await self._delete(f"/collections/{collection}/vectors/{id}")
-
     async def health(self) -> Dict:
         return await self._get("/admin/health")
+
+    async def metrics(self) -> Dict:
+        return await self._get("/admin/metrics")
 
     async def _get(self, path: str, params: Optional[Dict] = None) -> Any:
         r = await self._client.get(path, params=params)
