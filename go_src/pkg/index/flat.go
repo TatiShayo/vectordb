@@ -2,10 +2,18 @@
 package index
 
 import (
+	"errors"
 	"math"
 	"runtime"
 	"sort"
 	"sync"
+)
+
+var (
+	// ErrDimensionMismatch is returned when a vector dimension does not match the index.
+	ErrDimensionMismatch = errors.New("vector dimension mismatch")
+	// ErrEmptyVector is returned when an empty vector is provided.
+	ErrEmptyVector = errors.New("vector cannot be empty")
 )
 
 // Vector is a slice of float32 values representing an embedding.
@@ -21,6 +29,7 @@ type SearchResult struct {
 type FlatIndex struct {
 	mu      sync.RWMutex
 	vectors []Vector
+	dim     int
 }
 
 // NewFlatIndex creates an empty index.
@@ -28,20 +37,33 @@ func NewFlatIndex() *FlatIndex {
 	return &FlatIndex{}
 }
 
-// Add appends a vector to the index and returns its assigned ID.
-func (idx *FlatIndex) Add(v Vector) int {
-	idx.mu.Lock()
-	defer idx.mu.Unlock()
-	copy := make(Vector, len(v))
-	copy_slice(v, copy)
-	idx.vectors = append(idx.vectors, copy)
-	return len(idx.vectors) - 1
+// Dim returns the embedding dimension expected by the index (0 if empty).
+func (idx *FlatIndex) Dim() int {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return idx.dim
 }
 
-func copy_slice(src, dst Vector) {
-	for i, v := range src {
-		dst[i] = v
+// Add appends a vector to the index and returns its assigned ID.
+// If the vector dimension does not match existing vectors, an error is returned.
+func (idx *FlatIndex) Add(v Vector) (int, error) {
+	if len(v) == 0 {
+		return -1, ErrEmptyVector
 	}
+
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+
+	if len(idx.vectors) == 0 {
+		idx.dim = len(v)
+	} else if len(v) != idx.dim {
+		return -1, ErrDimensionMismatch
+	}
+
+	cp := make(Vector, len(v))
+	copy(cp, v)
+	idx.vectors = append(idx.vectors, cp)
+	return len(idx.vectors) - 1, nil
 }
 
 // Len returns the number of indexed vectors.
@@ -52,13 +74,20 @@ func (idx *FlatIndex) Len() int {
 }
 
 // Search returns the topK most similar vectors to query using goroutine fan-out.
+// If query dimension does not match the index, nil is returned.
 func (idx *FlatIndex) Search(query Vector, topK int) []SearchResult {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 
 	n := len(idx.vectors)
-	if n == 0 {
+	if n == 0 || len(query) == 0 {
 		return nil
+	}
+	if idx.dim > 0 && len(query) != idx.dim {
+		return nil
+	}
+	if topK <= 0 {
+		topK = 10
 	}
 	if topK > n {
 		topK = n
@@ -111,9 +140,14 @@ func (idx *FlatIndex) Search(query Vector, topK int) []SearchResult {
 }
 
 // cosineSimilarity computes cosine similarity between two vectors.
+// It guards against slice boundary overflows and division by zero.
 func cosineSimilarity(a, b Vector) float32 {
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
+	}
 	var dot, na, nb float64
-	for i := range a {
+	for i := 0; i < n; i++ {
 		av, bv := float64(a[i]), float64(b[i])
 		dot += av * bv
 		na += av * av

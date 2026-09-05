@@ -35,11 +35,21 @@ type SearchRequest struct {
 	TopK  int       `json:"top_k"`
 }
 
+type SearchResultItem struct {
+	ID       int               `json:"id"`
+	Score    float32           `json:"score"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
 type SearchResponse struct {
-	Results []index.SearchResult `json:"results"`
+	Results []SearchResultItem `json:"results"`
 }
 
 func (s *Server) handleAdd(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	var req AddRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
@@ -49,7 +59,11 @@ func (s *Server) handleAdd(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "vector required", http.StatusBadRequest)
 		return
 	}
-	id := s.idx.Add(index.Vector(req.Vector))
+	id, err := s.idx.Add(index.Vector(req.Vector))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	if req.Metadata != nil {
 		s.store.Set(id, req.Metadata)
 	}
@@ -58,6 +72,10 @@ func (s *Server) handleAdd(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	var req SearchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid JSON", http.StatusBadRequest)
@@ -67,15 +85,26 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "query required", http.StatusBadRequest)
 		return
 	}
-	if req.TopK <= 0 { req.TopK = 10 }
-	results := s.idx.Search(index.Vector(req.Query), req.TopK)
+	if req.TopK <= 0 {
+		req.TopK = 10
+	}
+	rawResults := s.idx.Search(index.Vector(req.Query), req.TopK)
+	items := make([]SearchResultItem, len(rawResults))
+	for i, r := range rawResults {
+		meta, _ := s.store.Get(r.ID)
+		items[i] = SearchResultItem{
+			ID:       r.ID,
+			Score:    r.Score,
+			Metadata: meta,
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(SearchResponse{Results: results})
+	json.NewEncoder(w).Encode(SearchResponse{Results: items})
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"status":"ok","vectors":%d}`, s.idx.Len())
+	fmt.Fprintf(w, `{"status":"ok","vectors":%d,"dim":%d}`, s.idx.Len(), s.idx.Dim())
 }
 
 func main() {
@@ -85,9 +114,9 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /vectors", srv.handleAdd)
-	mux.HandleFunc("POST /search", srv.handleSearch)
-	mux.HandleFunc("GET /health", srv.handleHealth)
+	mux.HandleFunc("/vectors", srv.handleAdd)
+	mux.HandleFunc("/search", srv.handleSearch)
+	mux.HandleFunc("/health", srv.handleHealth)
 
 	httpSrv := &http.Server{Addr: ":8080", Handler: mux}
 

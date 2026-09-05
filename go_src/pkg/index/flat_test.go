@@ -17,7 +17,10 @@ func TestEmptyIndexReturnsNil(t *testing.T) {
 
 func TestSingleVectorIsTop1(t *testing.T) {
 	idx := NewFlatIndex()
-	idx.Add(makeVec(1, 0, 0))
+	_, err := idx.Add(makeVec(1, 0, 0))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	res := idx.Search(makeVec(1, 0, 0), 1)
 	if len(res) != 1 || res[0].ID != 0 {
 		t.Errorf("unexpected result: %v", res)
@@ -82,7 +85,6 @@ func TestZeroVectorHandledGracefully(t *testing.T) {
 	idx := NewFlatIndex()
 	idx.Add(makeVec(0, 0, 0))
 	res := idx.Search(makeVec(1, 0, 0), 1)
-	// Should return 0, not NaN or panic
 	if math.IsNaN(float64(res[0].Score)) {
 		t.Error("got NaN score for zero vector")
 	}
@@ -102,21 +104,49 @@ func TestLargeVectorDimension(t *testing.T) {
 	}
 }
 
+func TestDimensionMismatchRejectedOnAdd(t *testing.T) {
+	idx := NewFlatIndex()
+	_, err := idx.Add(makeVec(1, 2, 3))
+	if err != nil {
+		t.Fatalf("first add should succeed: %v", err)
+	}
+	// Try adding 2-dim vector into 3-dim index
+	_, err = idx.Add(makeVec(1, 2))
+	if err != ErrDimensionMismatch {
+		t.Errorf("expected ErrDimensionMismatch, got %v", err)
+	}
+}
+
+func TestDimensionMismatchSearchReturnsNil(t *testing.T) {
+	idx := NewFlatIndex()
+	idx.Add(makeVec(1, 2, 3))
+	// Query with 2-dim vector
+	res := idx.Search(makeVec(1, 2), 5)
+	if res != nil {
+		t.Errorf("expected nil for mismatched query dimension, got %v", res)
+	}
+}
+
+func TestEmptyVectorRejected(t *testing.T) {
+	idx := NewFlatIndex()
+	_, err := idx.Add(Vector{})
+	if err != ErrEmptyVector {
+		t.Errorf("expected ErrEmptyVector, got %v", err)
+	}
+}
+
 func TestConcurrentAddAndSearchNoRace(t *testing.T) {
 	idx := NewFlatIndex()
-	// Pre-populate to avoid empty-index edge case
 	for i := 0; i < 50; i++ {
 		idx.Add(makeVec(float32(i), float32(i+1)))
 	}
 	done := make(chan struct{})
-	// Concurrent reader
 	go func() {
 		for i := 0; i < 200; i++ {
 			idx.Search(makeVec(1, 2), 3)
 		}
 		close(done)
 	}()
-	// Concurrent writer
 	for i := 0; i < 50; i++ {
 		idx.Add(makeVec(float32(i), 0))
 	}
@@ -130,5 +160,8 @@ func TestLenTracksAddedVectors(t *testing.T) {
 	}
 	if idx.Len() != 42 {
 		t.Errorf("expected Len()=42, got %d", idx.Len())
+	}
+	if idx.Dim() != 1 {
+		t.Errorf("expected Dim()=1, got %d", idx.Dim())
 	}
 }
