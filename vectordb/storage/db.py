@@ -39,7 +39,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS vectors_fts USING fts5(id UNINDEXED, content,
 # Regex for safe metadata keys (prevents SQL injection)
 _SAFE_KEY_REGEX = re.compile(r"^[a-zA-Z0-9_.-]+$")
 
-
 def _sqlite_regexp(expr: str, item: Optional[str]) -> bool:
     """SQLite custom function for REGEXP operator."""
     if item is None or expr is None:
@@ -48,7 +47,6 @@ def _sqlite_regexp(expr: str, item: Optional[str]) -> bool:
         return re.search(expr, str(item)) is not None
     except Exception:
         return False
-
 
 def match_filter(metadata: Dict[str, Any], filter_dict: Optional[Dict[str, Any]]) -> bool:
     """
@@ -119,7 +117,6 @@ def match_filter(metadata: Dict[str, Any], filter_dict: Optional[Dict[str, Any]]
                     return False
 
     return True
-
 
 def _build_filter_sql(filter_dict: Optional[Dict[str, Any]]) -> Tuple[str, List[Any]]:
     """
@@ -226,7 +223,6 @@ def _build_filter_sql(filter_dict: Optional[Dict[str, Any]]) -> Tuple[str, List[
     if not clauses:
         return "", []
     return " AND ".join(clauses), params
-
 
 class CollectionDB:
     def __init__(self, db_path: str):
@@ -478,17 +474,14 @@ class CollectionDB:
         with self._lock:
             self._c.close()
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
 
 def _expires(s: Optional[int]) -> Optional[str]:
     if s is None:
         return None
     return (datetime.now(timezone.utc) + timedelta(seconds=s)).isoformat()
-
 
 def _row(row: sqlite3.Row, include_vector: bool) -> Dict:
     d = dict(row)

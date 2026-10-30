@@ -39,18 +39,15 @@ PRODUCTS = [
     ("Desk Lamp", "home", ["led", "colour-temperature", "study"]),
 ]
 
-
 def random_vector(dim: int) -> List[float]:
     v = np.random.randn(dim).astype(np.float32)
     v /= np.linalg.norm(v)
     return v.tolist()
 
-
 def seed(host: str, key: str, n: int, dim: int):
     headers = {"X-API-Key": key, "Content-Type": "application/json"}
     base = host.rstrip("/")
 
-    # 1. Create collection
     col_payload = {
         "name": "products",
         "dimension": dim,
@@ -66,7 +63,6 @@ def seed(host: str, key: str, n: int, dim: int):
     else:
         print("Created collection 'products'.")
 
-    # 2. Batch upsert in chunks of 100
     batch_size = 100
     total_inserted = 0
     t0 = time.time()
@@ -110,7 +106,6 @@ def seed(host: str, key: str, n: int, dim: int):
     print(f"\nDone. {total_inserted} vectors in {elapsed:.2f}s "
           f"({total_inserted/elapsed:.0f} vecs/sec)\n")
 
-    # 3. Test search
     print("Running test search …")
     query = random_vector(dim)
     r = requests.post(
@@ -126,7 +121,6 @@ def seed(host: str, key: str, n: int, dim: int):
     else:
         print(f"Search failed: {r.status_code} {r.text}")
 
-    # 4. Test filtered search
     print("\nFiltered search (electronics only) …")
     r = requests.post(
         f"{base}/collections/products/search",
@@ -139,7 +133,6 @@ def seed(host: str, key: str, n: int, dim: int):
 
     print("\nSeed complete. API docs at: http://localhost:8000/docs")
     print("Admin UI at: http://localhost:8000/ui")
-
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()

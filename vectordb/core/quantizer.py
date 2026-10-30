@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 QuantMode = Literal["float32", "int8", "uint8", "binary"]
 
-
 class Quantizer:
     """Scalar Quantizer supporting float32, int8, uint8, and binary modes."""
 
@@ -189,7 +188,6 @@ class Quantizer:
             q._zero = np.array(d["zero"], dtype=np.float32)
             q._fitted = True
         return q
-
 
 class ProductQuantizer:
     """

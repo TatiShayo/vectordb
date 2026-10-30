@@ -11,7 +11,6 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger("vectordb.http")
 
-
 class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         from config import RATE_LIMIT_ENABLED, API_KEY_HEADER, SEARCH_COST
@@ -33,7 +32,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         resp = await call_next(request)
         resp.headers["X-RateLimit-Remaining"] = str(int(limiter.remaining(key)))
         return resp
-
 
 class RequestLogMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):

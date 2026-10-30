@@ -11,7 +11,6 @@ import sys
 import time
 from typing import Optional
 
-
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         doc = {
@@ -27,7 +26,6 @@ class JsonFormatter(logging.Formatter):
             if hasattr(record, key):
                 doc[key] = getattr(record, key)
         return json.dumps(doc, ensure_ascii=False)
-
 
 def setup(level: str = "INFO") -> None:
     fmt = os.environ.get("VDB_LOG_FORMAT", "json").lower()

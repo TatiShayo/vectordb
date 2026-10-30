@@ -16,7 +16,6 @@ class DistanceMetric(str, Enum):
     L2 = "l2"
     MANHATTAN = "manhattan"
 
-
 class QuantMode(str, Enum):
     FLOAT32="float32"; INT8="int8"; BINARY="binary"
 

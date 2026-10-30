@@ -4,7 +4,6 @@ import time, threading
 from collections import deque
 from typing import Deque, Dict
 
-
 class _Window:
     def __init__(self, n=1000):
         self._s: Deque[float] = deque(maxlen=n)
@@ -14,7 +13,6 @@ class _Window:
     def avg(self):
         with self._l:
             return sum(self._s)/len(self._s) if self._s else 0.0
-
 
 class Metrics:
     def __init__(self):
@@ -49,6 +47,5 @@ class Metrics:
                 "deletes": self.deletes,
                 "avg_search_ms": round(self._slat.avg(), 2),
             }
-
 
 metrics = Metrics()

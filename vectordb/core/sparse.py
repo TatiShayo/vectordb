@@ -27,12 +27,10 @@ STOPWORDS: Set[str] = {
     "their", "they", "them", "which", "who", "whom", "whose", "where", "when",
 }
 
-
 def tokenize(text: str) -> List[str]:
     """Tokenize string into lowercase alphanumeric terms, filtering stopwords and short tokens."""
     tokens = re.findall(r"[a-zA-Z0-9]+", text.lower())
     return [t for t in tokens if t not in STOPWORDS and len(t) > 1]
-
 
 def bm25_encode(
     text: str,
@@ -71,7 +69,6 @@ def bm25_encode(
         result[term_id] = float(tf_norm * idf)
 
     return result
-
 
 class SparseIndex:
     """In-memory inverted index for sparse vectors and BM25 search."""
@@ -189,7 +186,6 @@ class SparseIndex:
             self._vocab.clear()
             self._rev_vocab.clear()
 
-
 def rrf_fuse(
     ranked_lists: List[List[Tuple[str, float]]],
     k: int = 60,
@@ -213,7 +209,6 @@ def rrf_fuse(
 
     result = sorted(scores.items(), key=lambda x: -x[1])
     return result
-
 
 def linear_weighted_fuse(
     dense_results: List[Tuple[str, float]],

@@ -9,7 +9,6 @@ import pytest
 from core.quantizer import Quantizer, ProductQuantizer
 from utils.normalize import normalize, cosine_similarity
 
-
 def test_scalar_quantizer_int8_precision_bounds():
     np.random.seed(42)
     dim = 128
@@ -31,7 +30,6 @@ def test_scalar_quantizer_int8_precision_bounds():
     assert error_metrics["mse"] < 0.0001, f"MSE {error_metrics['mse']} exceeds bound"
     assert error_metrics["mean_cosine_similarity"] > 0.995
 
-
 def test_scalar_quantizer_uint8_affine():
     np.random.seed(42)
     dim = 64
@@ -51,7 +49,6 @@ def test_scalar_quantizer_uint8_affine():
     rel_error = np.mean(np.abs(vectors - decoded) / 200.0)
     assert rel_error < 0.01
 
-
 def test_scalar_quantizer_binary_compression():
     np.random.seed(42)
     dim = 64  # 64 floats (256 bytes) -> 8 bytes in binary
@@ -66,7 +63,6 @@ def test_scalar_quantizer_binary_compression():
     assert decoded.shape == (50, dim)
     # Decoded values are in {-1.0, +1.0}
     assert set(np.unique(decoded)).issubset({-1.0, 1.0})
-
 
 def test_scalar_quantizer_serialization():
     dim = 32
@@ -83,7 +79,6 @@ def test_scalar_quantizer_serialization():
     test_vec = vectors[:5]
     assert np.array_equal(sq1.encode(test_vec), sq2.encode(test_vec))
 
-
 def test_scalar_quantizer_rescore():
     np.random.seed(123)
     dim = 32
@@ -96,7 +91,6 @@ def test_scalar_quantizer_rescore():
     assert len(top_scores) == 5
     # Scores must be in descending order
     assert all(top_scores[i] >= top_scores[i + 1] for i in range(4))
-
 
 def test_product_quantizer_fit_and_encode():
     np.random.seed(42)
@@ -123,7 +117,6 @@ def test_product_quantizer_fit_and_encode():
     assert metrics["mse"] < 0.05
     assert metrics["mean_cosine_similarity"] > 0.85
 
-
 def test_product_quantizer_asymmetric_distance_computation():
     np.random.seed(42)
     dim = 32
@@ -145,7 +138,6 @@ def test_product_quantizer_asymmetric_distance_computation():
     exact_l2_sq = np.sum((decoded - query[np.newaxis, :]) ** 2, axis=1)
     assert np.allclose(adc_dists, exact_l2_sq, atol=1e-4)
 
-
 def test_product_quantizer_serialization():
     dim = 32
     m = 4
@@ -164,7 +156,6 @@ def test_product_quantizer_serialization():
     test_codes = pq1.encode(vectors[:5])
     test_codes2 = pq2.encode(vectors[:5])
     assert np.array_equal(test_codes, test_codes2)
-
 
 def test_product_quantizer_invalid_params():
     with pytest.raises(ValueError):

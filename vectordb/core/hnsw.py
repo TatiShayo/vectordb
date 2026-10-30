@@ -22,7 +22,6 @@ from utils.normalize import compute_distance, normalize, prepare_vector
 
 logger = logging.getLogger(__name__)
 
-
 class HNSWIndex:
     """
     Thread-safe Hierarchical Navigable Small World (HNSW) vector index.
@@ -100,11 +99,9 @@ class HNSWIndex:
             node_level = self._get_random_level()
             self.node_levels[node_id] = node_level
 
-            # Ensure layers list has enough levels
             while len(self.layers) <= node_level:
                 self.layers.append({})
 
-            # Initialize node in all its layers 0..node_level
             for lvl in range(node_level + 1):
                 self.layers[lvl][node_id] = []
 
@@ -116,7 +113,6 @@ class HNSWIndex:
             curr_ep = self.entry_point
             curr_dist = self._dist(vec, self.nodes[curr_ep])
 
-            # 1. Greedy search down from max_level to node_level + 1 (with cycle prevention)
             for lvl in range(self.max_level, node_level, -1):
                 changed = True
                 visited_greedy: Set[int] = {curr_ep}
@@ -133,7 +129,6 @@ class HNSWIndex:
                             curr_ep = neighbor
                             changed = True
 
-            # 2. Connect from min(max_level, node_level) down to 0
             ep_set = {curr_ep}
             for lvl in range(min(self.max_level, node_level), -1, -1):
                 valid_eps = {ep for ep in ep_set if self.node_levels.get(ep, -1) >= lvl and ep not in self._deleted}
@@ -144,14 +139,12 @@ class HNSWIndex:
 
                 # Search level for ef candidates
                 candidates = self._search_layer(vec, valid_eps, self.ef_construction, lvl)
-                # Remove self from candidates
                 candidates = [(d, c_id) for d, c_id in candidates if c_id != node_id]
 
                 # Select M (or M0) neighbors
                 max_conn = self.m0 if lvl == 0 else self.m
                 selected_neighbors = self._select_heuristic(vec, candidates, max_conn)
 
-                # Add bidirectional links
                 for neighbor in selected_neighbors:
                     if neighbor not in self.layers[lvl]:
                         continue
@@ -279,7 +272,6 @@ class HNSWIndex:
 
             curr_dist = self._dist(q, self.nodes[curr_ep])
 
-            # 1. Greedy search from max_level down to 1 (with cycle prevention)
             for lvl in range(self.max_level, 0, -1):
                 changed = True
                 visited_greedy: Set[int] = {curr_ep}
@@ -296,7 +288,6 @@ class HNSWIndex:
                             curr_ep = neighbor
                             changed = True
 
-            # 2. Beam search at level 0
             candidates = self._search_layer(q, {curr_ep}, ef, 0)
             valid = [(n_id, d) for d, n_id in candidates if n_id not in self._deleted and n_id in self.nodes]
             valid.sort(key=lambda x: x[1])

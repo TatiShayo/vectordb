@@ -32,7 +32,6 @@ async def lifespan(app: FastAPI):
     engine.shutdown()
     logger.info("Done.")
 
-
 app = FastAPI(
     title="VectorDB", description="Lightweight production-ready vector database.",
     version="2.0.0", lifespan=lifespan, docs_url="/docs", redoc_url="/redoc",

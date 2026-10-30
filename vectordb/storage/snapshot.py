@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from core.collection import Collection
 
-
 def _file_sha256(filepath: Union[str, Path]) -> str:
     """Compute SHA256 hex digest of a file."""
     h = hashlib.sha256()
@@ -29,7 +28,6 @@ def _file_sha256(filepath: Union[str, Path]) -> str:
         while chunk := f.read(65536):
             h.update(chunk)
     return h.hexdigest()
-
 
 def export_snapshot(col: "Collection", output_path: str) -> Dict:
     """
@@ -40,14 +38,11 @@ def export_snapshot(col: "Collection", output_path: str) -> Dict:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
 
-        # 1. Force save FAISS index
         col.force_save()
 
-        # 2. Checkpoint SQLite WAL -> main file
         db_path = col._db.db_path
         _checkpoint_sqlite(db_path)
 
-        # 3. Copy files into temp dir and compute checksums
         checksums: Dict[str, str] = {}
         index_src = Path(col._index_path)
         if index_src.exists():
@@ -65,7 +60,6 @@ def export_snapshot(col: "Collection", output_path: str) -> Dict:
             shutil.copy2(centroids_src, dest_cent)
             checksums["centroids.npy"] = _file_sha256(dest_cent)
 
-        # 4. Write manifest with checksums
         manifest = {
             "version": "2.0",
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -76,7 +70,6 @@ def export_snapshot(col: "Collection", output_path: str) -> Dict:
         }
         (tmp_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
-        # 5. Pack into tar.gz
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
         with tarfile.open(output_path, "w:gz") as tar:
             tar.add(tmp_dir, arcname="")
@@ -90,7 +83,6 @@ def export_snapshot(col: "Collection", output_path: str) -> Dict:
         f"({manifest['vector_count']} vecs, {manifest['size_bytes']} bytes, {elapsed:.2f}s)"
     )
     return manifest
-
 
 def verify_snapshot(snapshot_path: str) -> Tuple[bool, str, Optional[Dict]]:
     """
@@ -132,7 +124,6 @@ def verify_snapshot(snapshot_path: str) -> Tuple[bool, str, Optional[Dict]]:
 
     except Exception as exc:
         return False, f"Snapshot verification error: {exc}", None
-
 
 def import_snapshot(
     snapshot_path: str,
@@ -177,7 +168,6 @@ def import_snapshot(
 
     logger.info(f"Snapshot imported: {collection_name} from {snapshot_path}")
     return manifest
-
 
 def _checkpoint_sqlite(db_path: str) -> None:
     """Force WAL checkpoint so the main .db file is fully up-to-date."""

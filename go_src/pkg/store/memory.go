@@ -23,7 +23,6 @@ func (s *MemoryStore) Set(id int, meta map[string]string) {
 	s.data[id] = copy
 }
 
-// Get retrieves metadata for a vector ID.
 func (s *MemoryStore) Get(id int) (map[string]string, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

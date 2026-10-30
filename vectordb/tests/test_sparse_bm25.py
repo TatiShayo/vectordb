@@ -16,7 +16,6 @@ from core.sparse import (
     tokenize,
 )
 
-
 def test_tokenize_clean_and_stopwords():
     text = "The Quick brown Fox jumps OVER the Lazy Dog! 123 in a box."
     tokens = tokenize(text)
@@ -32,7 +31,6 @@ def test_tokenize_clean_and_stopwords():
     assert "123" in tokens
     assert "box" in tokens
 
-
 def test_bm25_encode_tf_saturation():
     text = "vector database vector vector index search"
     vocab = {}
@@ -44,7 +42,6 @@ def test_bm25_encode_tf_saturation():
     # TF for 'vector' is 3, TF for 'database' is 1. Weight of 'vector' should be higher but sub-linear (saturated)
     assert vec[vid] > vec[did]
     assert vec[vid] < 3.0 * vec[did]  # Saturation check
-
 
 def test_sparse_index_add_and_search():
     index = SparseIndex()
@@ -69,7 +66,6 @@ def test_sparse_index_add_and_search():
     assert len(results3) == 1
     assert results3[0][0] == "doc3"
 
-
 def test_sparse_index_text_search_with_idf():
     index = SparseIndex()
     index.add_text("doc1", "machine learning neural networks deep learning")
@@ -81,7 +77,6 @@ def test_sparse_index_text_search_with_idf():
     matched_ids = [d_id for d_id, _ in results]
     assert "doc1" in matched_ids or "doc3" in matched_ids
     assert "doc2" not in matched_ids
-
 
 def test_sparse_index_remove_and_clear():
     index = SparseIndex()
@@ -99,7 +94,6 @@ def test_sparse_index_remove_and_clear():
     assert index.size() == 0
     assert index.search({1: 1.0}, top_k=5) == []
 
-
 def test_rrf_fuse_ranking():
     # List 1: A (rank 1), B (rank 2), C (rank 3)
     list1 = [("docA", 0.9), ("docB", 0.8), ("docC", 0.7)]
@@ -115,7 +109,6 @@ def test_rrf_fuse_ranking():
     assert "docC" in doc_ids
     assert "docD" in doc_ids
 
-
 def test_rrf_fuse_custom_weights():
     list1 = [("docA", 0.9)]
     list2 = [("docB", 0.9)]
@@ -124,7 +117,6 @@ def test_rrf_fuse_custom_weights():
     fused = rrf_fuse([list1, list2], k=60, weights=[0.1, 0.9])
     assert fused[0][0] == "docB"
     assert fused[1][0] == "docA"
-
 
 def test_linear_weighted_fuse():
     dense_results = [("doc1", 0.95), ("doc2", 0.60), ("doc3", 0.40)]
@@ -138,7 +130,6 @@ def test_linear_weighted_fuse():
     # Scores are ordered descending
     scores = [s for _, s in fused]
     assert all(scores[i] >= scores[i + 1] for i in range(len(scores) - 1))
-
 
 def test_linear_weighted_fuse_boundary_weights():
     dense = [("doc1", 1.0), ("doc2", 0.0)]

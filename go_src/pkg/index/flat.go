@@ -44,7 +44,6 @@ func (idx *FlatIndex) Dim() int {
 	return idx.dim
 }
 
-// Add appends a vector to the index and returns its assigned ID.
 // If the vector dimension does not match existing vectors, an error is returned.
 func (idx *FlatIndex) Add(v Vector) (int, error) {
 	if len(v) == 0 {

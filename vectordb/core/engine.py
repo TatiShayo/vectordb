@@ -13,7 +13,6 @@ from core.collection import Collection
 
 logger = logging.getLogger(__name__)
 
-
 class Engine:
     def __init__(self):
         self._collections: Dict[str, Collection] = {}
@@ -102,7 +101,7 @@ class Engine:
                     col.close()
                 except Exception as exc:
                     logger.warning(f"Could not close collection '{name}' before deletion: {exc}")
-            
+
             folder = (COLLECTIONS_DIR / name).resolve()
             try:
                 if not folder.is_relative_to(COLLECTIONS_DIR.resolve()):
@@ -203,10 +202,8 @@ class Engine:
             except Exception as exc:
                 logger.error(f"Auto-save error: {exc}")
 
-
 _engine: Optional[Engine] = None
 _engine_lock = threading.Lock()
-
 
 def get_engine() -> Engine:
     global _engine

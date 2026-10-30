@@ -18,7 +18,6 @@ import pytest
 
 from storage.db import CollectionDB, match_filter
 
-
 @pytest.fixture
 def temp_db():
     with tempfile.TemporaryDirectory() as tmp:
@@ -27,7 +26,6 @@ def temp_db():
         yield db
         db.close()
 
-
 def test_match_filter_in_memory_equality():
     meta = {"genre": "sci-fi", "rating": 4.8, "year": 2024}
     assert match_filter(meta, {"genre": "sci-fi"}) is True
@@ -35,7 +33,6 @@ def test_match_filter_in_memory_equality():
     assert match_filter(meta, {"genre": {"$eq": "sci-fi"}}) is True
     assert match_filter(meta, {"genre": {"$ne": "fantasy"}}) is True
     assert match_filter(meta, {"genre": {"$ne": "sci-fi"}}) is False
-
 
 def test_match_filter_in_memory_comparisons():
     meta = {"price": 49.99, "stock": 10}
@@ -46,14 +43,12 @@ def test_match_filter_in_memory_comparisons():
     assert match_filter(meta, {"stock": {"$lte": 10}}) is True
     assert match_filter(meta, {"stock": {"$lt": 10}}) is False
 
-
 def test_match_filter_in_memory_in_and_nin():
     meta = {"tag": "electronics", "status": "published"}
     assert match_filter(meta, {"tag": {"$in": ["books", "electronics", "home"]}}) is True
     assert match_filter(meta, {"tag": {"$in": ["books", "home"]}}) is False
     assert match_filter(meta, {"status": {"$nin": ["archived", "draft"]}}) is True
     assert match_filter(meta, {"status": {"$nin": ["published"]}}) is False
-
 
 def test_match_filter_in_memory_regex_and_exists():
     meta = {"email": "alice@vectordb.internal", "profile": {"age": 30}}
@@ -62,7 +57,6 @@ def test_match_filter_in_memory_regex_and_exists():
     assert match_filter(meta, {"email": {"$exists": True}}) is True
     assert match_filter(meta, {"missing_key": {"$exists": False}}) is True
     assert match_filter(meta, {"email": {"$exists": False}}) is False
-
 
 def test_match_filter_in_memory_logical_combinators():
     meta = {"category": "books", "price": 25.0, "rating": 4.5}
@@ -79,7 +73,6 @@ def test_match_filter_in_memory_logical_combinators():
     assert match_filter(meta, {"$not": {"category": "movies"}}) is True
     assert match_filter(meta, {"$not": {"category": "books"}}) is False
 
-
 def test_sqlite_filtering_full_lifecycle(temp_db):
     """Test all predicate operators translated to SQLite queries in CollectionDB."""
     db = temp_db
@@ -95,50 +88,40 @@ def test_sqlite_filtering_full_lifecycle(temp_db):
     db.upsert_batch(items)
     assert db.count() == 4
 
-    # 1. Exact match
     recs, total = db.scroll(filter_dict={"category": "electronics"})
     assert total == 2
     assert {r["id"] for r in recs} == {"item1", "item2"}
 
-    # 2. $gte and $lte range
     recs, total = db.scroll(filter_dict={"price": {"$gte": 50.0, "$lte": 200.0}})
     assert total == 2
     assert {r["id"] for r in recs} == {"item1", "item4"}
 
-    # 3. $in
     recs, total = db.scroll(filter_dict={"brand": {"$in": ["Sony", "Penguin"]}})
     assert total == 2
     assert {r["id"] for r in recs} == {"item1", "item3"}
 
-    # 4. $nin
     recs, total = db.scroll(filter_dict={"category": {"$nin": ["electronics"]}})
     assert total == 2
     assert {r["id"] for r in recs} == {"item3", "item4"}
 
-    # 5. $regex
     recs, total = db.scroll(filter_dict={"brand": {"$regex": "^[SP].*"}})
     assert total == 2
     assert {r["id"] for r in recs} == {"item1", "item3"}
 
-    # 6. $or logical query
     recs, total = db.scroll(filter_dict={"$or": [{"category": "books"}, {"brand": "Ikea"}]})
     assert total == 2
     assert {r["id"] for r in recs} == {"item3", "item4"}
 
-    # 7. filter_faiss_ids
     filtered_fids = db.filter_faiss_ids([1, 2, 3, 4], {"category": "electronics", "price": {"$lt": 100.0}})
     assert filtered_fids == [2]
 
-    # 8. count_filtered
     assert db.count_filtered({"category": "electronics"}) == 2
     assert db.count_filtered({"price": {"$lt": 20.0}}) == 1
 
-    # 9. Facets
     facet_counts = db.facets("category")
     assert facet_counts["electronics"] == 2
     assert facet_counts["books"] == 1
     assert facet_counts["home"] == 1
-
 
 def test_sqlite_sql_injection_prevention(temp_db):
     """Ensure invalid / malicious metadata keys are rejected."""

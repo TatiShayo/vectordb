@@ -19,14 +19,12 @@ from core.indexer import FAISSIndex, IndexType
 
 logger = logging.getLogger(__name__)
 
-
 def save(index: FAISSIndex, index_path: str) -> None:
     """Save FAISS index atomically."""
     tmp = index_path + ".tmp"
     index.save(tmp)
     os.replace(tmp, index_path)
     logger.debug(f"Saved FAISS index ({index.size} vectors) -> {index_path}")
-
 
 def load_or_rebuild(index: FAISSIndex, index_path: str, db) -> None:
     """
@@ -50,7 +48,6 @@ def load_or_rebuild(index: FAISSIndex, index_path: str, db) -> None:
             logger.warning(f"Could not load FAISS index ({exc}). Initiating automatic recovery rebuild.")
 
     _rebuild_from_db(index, db)
-
 
 def _rebuild_from_db(index: FAISSIndex, db) -> None:
     vectors, faiss_ids = db.all_vectors_for_rebuild()

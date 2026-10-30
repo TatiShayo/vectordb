@@ -13,13 +13,11 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from cli import _rnd_vec, _h
 
-
 def test_cli_rnd_vec():
     """Verify CLI random normalized vector generator."""
     v = _rnd_vec(16)
     assert len(v) == 16
     assert np.isclose(np.linalg.norm(v), 1.0, atol=1e-5)
-
 
 def test_cli_headers():
     """Verify CLI header auth switching."""
@@ -29,7 +27,6 @@ def test_cli_headers():
 
     h_admin = _h(admin=True)
     assert h_admin["X-API-Key"] == "admin-secret"
-
 
 def test_cli_parser_collection_commands():
     """Verify argument parsing for collection commands."""
@@ -53,7 +50,6 @@ def test_cli_parser_collection_commands():
     assert args.distance == "euclidean"
     assert args.desc == "My test collection"
 
-
 def test_cli_parser_vector_commands():
     """Verify argument parsing for vector commands."""
     parser = argparse.ArgumentParser()
@@ -74,7 +70,6 @@ def test_cli_parser_vector_commands():
     assert args.vector == "0.1,0.2,0.3"
     assert args.meta == '{"k":"v"}'
     assert args.ttl == 3600
-
 
 def test_cli_parser_search_commands():
     """Verify argument parsing for search commands."""

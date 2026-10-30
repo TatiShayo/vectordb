@@ -16,13 +16,11 @@ import pytest
 from core.hnsw import HNSWIndex
 from utils.normalize import compute_distance, normalize, pairwise_distances
 
-
 def _brute_force_knn(vectors: np.ndarray, query: np.ndarray, top_k: int, metric: str = "cosine") -> list[int]:
     """Ground truth brute-force exact k-NN search."""
     dists = pairwise_distances(vectors, query.reshape(1, -1), metric=metric).ravel()
     sorted_indices = np.argsort(dists)
     return list(sorted_indices[:top_k])
-
 
 @pytest.mark.parametrize("dim", [64, 128, 384, 1536])
 def test_hnsw_recall_across_dimensions(dim: int):
@@ -39,7 +37,6 @@ def test_hnsw_recall_across_dimensions(dim: int):
 
     assert index.size() == n_samples
 
-    # Test queries
     n_queries = 10
     queries = np.random.randn(n_queries, dim).astype(np.float32)
     recalls = []
@@ -48,14 +45,13 @@ def test_hnsw_recall_across_dimensions(dim: int):
         gt_ids = _brute_force_knn(raw_vectors, q, top_k, metric="cosine")
         results = index.search(q, top_k=top_k, ef_search=64)
         hnsw_ids = [n_id for n_id, _ in results]
-        
+
         overlap = len(set(gt_ids) & set(hnsw_ids))
         recall = overlap / top_k
         recalls.append(recall)
 
     mean_recall = float(np.mean(recalls))
     assert mean_recall >= 0.85, f"Dim {dim} recall {mean_recall:.2f} < 0.85"
-
 
 def test_hnsw_euclidean_metric():
     np.random.seed(101)
@@ -72,7 +68,6 @@ def test_hnsw_euclidean_metric():
     assert results[0][0] == 0  # Nearest neighbor must be itself
     assert np.isclose(results[0][1], 0.0, atol=1e-4)
 
-
 def test_hnsw_manhattan_metric():
     np.random.seed(202)
     dim = 16
@@ -87,7 +82,6 @@ def test_hnsw_manhattan_metric():
     assert results[0][0] == 5
     assert np.isclose(results[0][1], 0.0, atol=1e-4)
 
-
 def test_hnsw_dot_product_metric():
     np.random.seed(303)
     dim = 32
@@ -100,7 +94,6 @@ def test_hnsw_dot_product_metric():
     query = vectors[10]
     results = index.search(query, top_k=1)
     assert results[0][0] == 10
-
 
 def test_hnsw_ef_search_tradeoff():
     np.random.seed(404)
@@ -122,7 +115,6 @@ def test_hnsw_ef_search_tradeoff():
     recall_high = len(set(gt) & set(r[0] for r in res_high)) / 10.0
 
     assert recall_high >= recall_low
-
 
 def test_hnsw_soft_deletion_and_rebuild():
     dim = 16
@@ -147,13 +139,11 @@ def test_hnsw_soft_deletion_and_rebuild():
     assert index.size() == 19
     assert 0 not in index.nodes
 
-
 def test_hnsw_empty_index_search():
     index = HNSWIndex(dimension=16)
     assert index.size() == 0
     results = index.search(np.zeros(16), top_k=5)
     assert results == []
-
 
 def test_hnsw_single_element():
     index = HNSWIndex(dimension=8, distance="cosine")
@@ -165,18 +155,16 @@ def test_hnsw_single_element():
     assert results[0][0] == 42
     assert np.isclose(results[0][1], 1.0, atol=1e-5)
 
-
 def test_hnsw_dimension_mismatch_raises():
     index = HNSWIndex(dimension=16)
     with pytest.raises(ValueError):
         index.add(1, [1.0, 2.0, 3.0])  # 3d != 16d
 
-
 def test_hnsw_concurrency_simultaneous_search_and_insert():
     """Verify thread-safety: no deadlock or exception during concurrent writes & searches."""
     dim = 32
     index = HNSWIndex(dimension=dim, distance="cosine", m=16, ef_construction=32)
-    
+
     # Pre-populate with 50 items
     for i in range(50):
         index.add(i, np.random.randn(dim).astype(np.float32))

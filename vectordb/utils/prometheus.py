@@ -6,7 +6,6 @@ from __future__ import annotations
 import time
 from typing import Dict
 
-
 class _Gauge:
     def __init__(self): self._v = 0.0
     def set(self, v): self._v = float(v)
@@ -27,7 +26,6 @@ class _Histogram:
         self._count += 1; self._sum += v
         for i, b in enumerate(self._BUCKETS):
             if v <= b: self._buckets[i] += 1
-
 
 class PrometheusRegistry:
     def __init__(self):
@@ -74,6 +72,5 @@ class PrometheusRegistry:
         lines += [f"vdb_search_seconds_count {h._count}",
                   f"vdb_search_seconds_sum {h._sum:.6f}"]
         return "\n".join(lines) + "\n"
-
 
 prom = PrometheusRegistry()

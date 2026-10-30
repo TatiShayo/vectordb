@@ -24,7 +24,6 @@ from config import (
 
 logger = logging.getLogger(__name__)
 
-
 class Collection:
     def __init__(
         self,
@@ -272,7 +271,6 @@ class Collection:
             # Linear weighted fusion with normalization
             fused = linear_weighted_fuse(dense_ranked, kw_ranked, vector_weight=vector_weight)
 
-        # Fetch records and apply filter
         results = []
         for vid, score in fused[: top_k * OVERFETCH_FACTOR]:
             rec = self._db.get(vid, include_vector)
@@ -530,7 +528,6 @@ class Collection:
     def _save(self):
         with self._save_lock:
             _save(self._index, self._index_path)
-
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()

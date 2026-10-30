@@ -25,7 +25,6 @@ from storage.db import CollectionDB, match_filter, _build_filter_sql
 from storage.snapshot import export_snapshot, verify_snapshot, import_snapshot
 from utils.normalize import compute_distance, normalize, cosine_similarity, prepare_vector
 
-
 # ── 1. HNSW Edge Cases ────────────────────────────────────────────────────────
 
 def test_hnsw_node_update_and_replacement():
@@ -33,7 +32,6 @@ def test_hnsw_node_update_and_replacement():
     dim = 16
     index = HNSWIndex(dimension=dim, distance="cosine", m=8, ef_construction=16)
 
-    # Add 10 nodes
     for i in range(10):
         index.add(i, np.random.randn(dim).astype(np.float32))
 
@@ -48,7 +46,6 @@ def test_hnsw_node_update_and_replacement():
     assert len(results) == 1
     assert results[0][0] == 5
     assert np.isclose(results[0][1], 1.0, atol=1e-4)
-
 
 def test_hnsw_zero_vectors_and_identical_vectors():
     """Verify HNSW handles multiple identical and zero-norm vectors gracefully."""
@@ -72,7 +69,6 @@ def test_hnsw_zero_vectors_and_identical_vectors():
     for _, d in res:
         assert np.isclose(d, 0.0, atol=1e-5)
 
-
 def test_hnsw_delete_entry_point():
     """Deleting the entry point should automatically reassign entry point to an active node."""
     dim = 8
@@ -89,7 +85,6 @@ def test_hnsw_delete_entry_point():
     assert len(res) == 3
     assert ep not in [r[0] for r in res]
 
-
 def test_hnsw_rebuild_after_full_deletion():
     """Deleting all nodes and rebuilding returns an empty graph."""
     dim = 8
@@ -104,7 +99,6 @@ def test_hnsw_rebuild_after_full_deletion():
     assert index.size() == 0
     assert index.entry_point is None
     assert index.search(np.random.randn(dim).astype(np.float32), top_k=5) == []
-
 
 # ── 2. Quantizer Extreme Cases ────────────────────────────────────────────────
 
@@ -129,7 +123,6 @@ def test_quantizer_int8_extreme_dynamic_range():
     assert np.all(enc[2] < 0)
     assert np.all(enc[3] == 0)
 
-
 def test_quantizer_binary_odd_dimensions():
     """Binary quantization with dimensions not divisible by 8 (e.g. 19d)."""
     dim = 19
@@ -143,7 +136,6 @@ def test_quantizer_binary_odd_dimensions():
     dec = q.decode(enc)
     assert dec.shape == (10, dim)
     assert np.all(np.isin(dec, [-1.0, 1.0]))
-
 
 def test_product_quantizer_few_samples():
     """Product Quantizer fitting when n_samples < k."""
@@ -164,7 +156,6 @@ def test_product_quantizer_few_samples():
     decoded = pq.decode(codes)
     assert decoded.shape == (5, dim)
     assert not np.isnan(decoded).any()
-
 
 # ── 3. Metadata Filtering Deep Predicates ─────────────────────────────────────
 
@@ -189,12 +180,10 @@ def test_filter_deeply_nested_and_or_tree():
     neg_filt = {"$not": {"status": "inactive"}}
     assert match_filter(meta, neg_filt) is True
 
-
 def test_filter_empty_in_and_nin_predicates():
     meta = {"color": "red"}
     assert match_filter(meta, {"color": {"$in": []}}) is False
     assert match_filter(meta, {"color": {"$nin": []}}) is True
-
 
 def test_filter_exists_edge_cases():
     meta = {"present": "yes", "null_val": None}
@@ -202,7 +191,6 @@ def test_filter_exists_edge_cases():
     assert match_filter(meta, {"present": {"$exists": False}}) is False
     assert match_filter(meta, {"absent": {"$exists": False}}) is True
     assert match_filter(meta, {"absent": {"$exists": True}}) is False
-
 
 def test_filter_sql_generation_empty_clauses():
     sql, params = _build_filter_sql({})
@@ -213,7 +201,6 @@ def test_filter_sql_generation_empty_clauses():
     assert sql == ""
     assert params == []
 
-
 # ── 4. BM25 and Sparse Edge Cases ─────────────────────────────────────────────
 
 def test_bm25_empty_and_whitespace_text():
@@ -221,7 +208,6 @@ def test_bm25_empty_and_whitespace_text():
     assert tokenize("   \n\t  ") == []
     assert bm25_encode("") == {}
     assert bm25_encode("the a on in") == {}  # all stopwords
-
 
 def test_bm25_special_characters_and_unicode():
     tokens = tokenize("Python 3.11 & FastAPI! #Vector_DB @2026-AI?")
@@ -233,13 +219,11 @@ def test_bm25_special_characters_and_unicode():
     assert "2026" in tokens
     assert "ai" in tokens
 
-
 def test_sparse_index_empty_query():
     idx = SparseIndex()
     idx.add("d1", {0: 1.0})
     assert idx.search({}, top_k=5) == []
     assert idx.search_text("", top_k=5) == []
-
 
 def test_linear_weighted_fuse_single_item():
     dense = [("d1", 0.8)]
@@ -247,7 +231,6 @@ def test_linear_weighted_fuse_single_item():
     fused = linear_weighted_fuse(dense, sparse, vector_weight=0.7)
     assert len(fused) == 1
     assert fused[0][0] == "d1"
-
 
 # ── 5. Snapshot Security & Corrupt Archive Handling ───────────────────────────
 
@@ -258,7 +241,6 @@ def test_snapshot_path_traversal_detection():
         os.makedirs(tmp_dir, exist_ok=True)
         bad_tar = os.path.join(tmp, "evil.tar.gz")
 
-        # Create a malicious tar with relative path traversal
         manifest_path = os.path.join(tmp_dir, "manifest.json")
         with open(manifest_path, "w") as f:
             f.write(json.dumps({"version": "2.0", "checksums": {}}))
@@ -269,7 +251,6 @@ def test_snapshot_path_traversal_detection():
         is_valid, msg, _ = verify_snapshot(bad_tar)
         assert is_valid is False
         assert "traversal" in msg.lower() or "dangerous" in msg.lower()
-
 
 def test_snapshot_missing_manifest():
     with tempfile.TemporaryDirectory() as tmp:
@@ -284,7 +265,6 @@ def test_snapshot_missing_manifest():
         is_valid, msg, _ = verify_snapshot(bad_tar)
         assert is_valid is False
         assert "manifest.json" in msg.lower()
-
 
 def test_snapshot_checksum_tamper_file():
     with tempfile.TemporaryDirectory() as tmp:

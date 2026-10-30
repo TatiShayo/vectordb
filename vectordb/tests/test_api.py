@@ -10,7 +10,6 @@ os.environ["VDB_RATE_LIMIT"] = "false"
 
 from fastapi.testclient import TestClient
 
-
 @pytest.fixture(scope="session")
 def app():
     from main import app as _app
@@ -37,7 +36,6 @@ def col(admin):
 def rv(dim=8):
     v = np.random.randn(dim).astype(np.float32)
     return (v/np.linalg.norm(v)).tolist()
-
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 def test_no_key_401(app):

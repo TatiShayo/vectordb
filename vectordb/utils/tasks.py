@@ -7,7 +7,6 @@ import threading, time, uuid
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Optional
 
-
 class TaskStore:
     def __init__(self):
         self._tasks: Dict[str, Dict] = {}
@@ -51,6 +50,5 @@ class TaskStore:
     def list(self) -> list:
         with self._lock:
             return [dict(t) for t in self._tasks.values()]
-
 
 tasks = TaskStore()

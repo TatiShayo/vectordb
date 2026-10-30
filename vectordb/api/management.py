@@ -15,7 +15,6 @@ from utils.cache import get_cache
 router = APIRouter(prefix="/admin", tags=["admin"])
 VERSION = "2.0.0"
 
-
 @router.get("/health", response_model=HealthResponse)
 def health():
     engine = get_engine()
@@ -36,7 +35,6 @@ def get_metrics(key: str = Depends(require_auth)):
     engine = get_engine()
     snap = metrics.snapshot()
     cache_stats = get_cache().stats()
-    # Update prometheus gauges
     prom.vector_count.set(engine.total_vectors())
     prom.collection_count.set(len(engine.list()))
     prom.cache_hits._v = cache_stats["hits"]
@@ -134,7 +132,7 @@ def restore_snapshot(collection_name: str, snapshot_path: str,
             raise HTTPException(400, "Invalid snapshot path")
     except Exception:
         raise HTTPException(400, "Invalid snapshot path")
-    
+
     snapshot_path = str(resolved_path)
     if not resolved_path.exists():
         raise HTTPException(404, f"Snapshot not found: {snapshot_path}")
@@ -163,7 +161,6 @@ def restore_snapshot(collection_name: str, snapshot_path: str,
         )
     return {"status": "restored", "collection": collection_name,
             "vector_count": manifest.get("vector_count", 0)}
-
 
 # ── Tasks ─────────────────────────────────────────────────────────────────────
 

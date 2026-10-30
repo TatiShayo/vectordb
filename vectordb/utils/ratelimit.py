@@ -10,7 +10,6 @@ import threading
 import time
 from typing import Dict, Optional
 
-
 class TokenBucket:
     def __init__(self, capacity: float, rate: float):
         self.capacity = capacity   # max tokens
@@ -34,7 +33,6 @@ class TokenBucket:
         with self._lock:
             now = time.monotonic()
             return min(self.capacity, self._tokens + (now - self._last) * self.rate)
-
 
 class RateLimiter:
     """Per-key token bucket store."""
@@ -65,9 +63,7 @@ class RateLimiter:
             "tracked_keys": len(self._buckets),
         }
 
-
 _limiter: Optional[RateLimiter] = None
-
 
 def get_limiter() -> RateLimiter:
     global _limiter

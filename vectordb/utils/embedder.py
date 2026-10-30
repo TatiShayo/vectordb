@@ -17,7 +17,6 @@ _lock = threading.Lock()
 _model = None
 _model_name: str | None = None
 
-
 def _load(model_name: str):
     global _model, _model_name
     if _model is not None and _model_name == model_name:
@@ -38,14 +37,12 @@ def _load(model_name: str):
             )
     return _model
 
-
 def embed(text: str | List[str], model_name: str = "all-MiniLM-L6-v2") -> np.ndarray:
     """Embed text(s) into float32 vectors. Returns (N, D) or (D,) ndarray."""
     model = _load(model_name)
     if isinstance(text, str):
         return model.encode([text], convert_to_numpy=True, normalize_embeddings=True)[0]
     return model.encode(text, convert_to_numpy=True, normalize_embeddings=True)
-
 
 def is_available(model_name: str = "all-MiniLM-L6-v2") -> bool:
     try:

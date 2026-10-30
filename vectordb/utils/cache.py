@@ -19,11 +19,9 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-
 def _hash_vector(v: np.ndarray) -> str:
     """Fast hash of a float32 vector via its bytes."""
     return hashlib.md5(v.astype(np.float32).tobytes()).hexdigest()
-
 
 def _hash_filter(f: Optional[Dict]) -> str:
     if not f:
@@ -31,7 +29,6 @@ def _hash_filter(f: Optional[Dict]) -> str:
     return hashlib.md5(
         json.dumps(f, sort_keys=True).encode()
     ).hexdigest()[:8]
-
 
 class QueryCache:
     """Thread-safe LRU cache for vector search results."""
@@ -126,10 +123,8 @@ class QueryCache:
             self._hits = 0
             self._misses = 0
 
-
 # Singleton
 _cache: Optional[QueryCache] = None
-
 
 def get_cache() -> QueryCache:
     global _cache

@@ -11,7 +11,6 @@ from models.schemas import (
 
 router = APIRouter(prefix="/collections", tags=["collections"])
 
-
 def _info(col) -> CollectionInfo:
     return CollectionInfo(
         name=col.name, dimension=col.dimension,
@@ -26,11 +25,9 @@ def _info(col) -> CollectionInfo:
         ivfpq_nbits=col.ivfpq_nbits,
     )
 
-
 @router.get("", response_model=List[CollectionInfo])
 def list_collections(key: str = Depends(require_auth)):
     return [_info(c) for c in get_engine().list()]
-
 
 @router.post("", response_model=CollectionInfo, status_code=201)
 def create_collection(body: CollectionCreate,
@@ -49,14 +46,12 @@ def create_collection(body: CollectionCreate,
         raise HTTPException(409, str(exc))
     return _info(col)
 
-
 @router.get("/{name}", response_model=CollectionInfo)
 def get_collection(name: str, key: str = Depends(require_auth)):
     try:
         return _info(get_engine().get(name))
     except KeyError:
         raise HTTPException(404, f"Collection '{name}' not found")
-
 
 @router.patch("/{name}", response_model=CollectionInfo)
 def update_collection(name: str, body: CollectionUpdate,
@@ -70,7 +65,6 @@ def update_collection(name: str, body: CollectionUpdate,
         col.updated_at = datetime.now(timezone.utc).isoformat()
         get_engine()._save_registry()
     return _info(col)
-
 
 @router.delete("/{name}", status_code=204)
 def delete_collection(name: str, key: str = Depends(require_admin)):

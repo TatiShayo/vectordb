@@ -15,7 +15,6 @@ from utils.tasks import TaskStore
 from utils.audit import record, get_audit_log
 from core.collection import Collection
 
-
 def test_token_bucket_rate_limiter():
     # 60 RPM = 1 token/sec, capacity 2
     tb = TokenBucket(capacity=2.0, rate=1.0)
@@ -26,7 +25,6 @@ def test_token_bucket_rate_limiter():
     limiter = RateLimiter(rpm=60, burst_multiplier=2.0)
     assert limiter.check("user-1", cost=1.0) is True
     assert limiter.remaining("user-1") >= 0.0
-
 
 def test_query_cache_lru_and_ttl():
     cache = QueryCache(max_size=3, ttl_seconds=0.1)
@@ -51,7 +49,6 @@ def test_query_cache_lru_and_ttl():
     time.sleep(0.15)
     assert cache.get("col", q1, 5) is None
 
-
 def test_query_cache_invalidation_on_write():
     cache = QueryCache(max_size=10, ttl_seconds=60.0)
     q = np.array([1.0, 0.0], dtype=np.float32)
@@ -65,7 +62,6 @@ def test_query_cache_invalidation_on_write():
     assert invalidated >= 1
     assert cache.get("col_a", q, 5) is None
     assert cache.get("col_b", q, 5) is not None
-
 
 def test_metrics_rolling_average():
     m = Metrics()
@@ -82,7 +78,6 @@ def test_metrics_rolling_average():
     assert snap["searches"] == 2
     assert np.isclose(snap["avg_search_ms"], 20.0)
 
-
 def test_prometheus_registry_rendering():
     prom = PrometheusRegistry()
     prom.vector_count.set(1500)
@@ -95,7 +90,6 @@ def test_prometheus_registry_rendering():
     assert "vdb_collections_total 5" in text
     assert 'vdb_requests_total{op="search"} 10' in text
     assert "vdb_search_seconds_bucket" in text
-
 
 def test_task_store_execution():
     store = TaskStore()
@@ -119,7 +113,6 @@ def test_task_store_execution():
     assert fail_task["status"] == "error"
     assert "Job crashed" in fail_task["message"]
 
-
 def test_audit_log_ring_buffer():
     for i in range(10):
         record(f"action_{i}", "secret_key_12345", f"/resource/{i}")
@@ -129,11 +122,10 @@ def test_audit_log_ring_buffer():
     # API key masked
     assert logs[0]["key"].endswith("…")
 
-
 def test_collection_concurrent_reads_and_writes(tmp_path):
     """Stress test: concurrent threads reading and writing to the same collection simultaneously."""
     col = Collection("stress_col", str(tmp_path), dimension=8, distance="cosine")
-    
+
     # Pre-populate
     for i in range(20):
         col.upsert(f"init_{i}", np.random.randn(8).tolist(), {"idx": i})

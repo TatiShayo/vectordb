@@ -14,7 +14,6 @@ from core.indexer import FAISSIndex, IndexType
 from storage.checkpointer import save, load_or_rebuild
 from storage.snapshot import export_snapshot, import_snapshot, verify_snapshot
 
-
 @pytest.fixture
 def test_env():
     with tempfile.TemporaryDirectory() as tmp:
@@ -24,12 +23,10 @@ def test_env():
         yield engine, data_dir
         engine.shutdown()
 
-
 def test_atomic_checkpointer_save_and_load(test_env):
     engine, data_dir = test_env
     col = engine.create("col_atomic", dimension=8, distance="cosine")
-    
-    # Add vectors
+
     vecs = np.random.randn(20, 8).astype(np.float32)
     items = [{"id": f"v{i}", "vector": v.tolist(), "metadata": {"i": i}} for i, v in enumerate(vecs)]
     col.upsert_batch(items)
@@ -41,12 +38,11 @@ def test_atomic_checkpointer_save_and_load(test_env):
     # Verify atomic saving: temp file should not persist
     assert not os.path.exists(index_path + ".tmp")
 
-
 def test_corrupt_index_recovery(test_env):
     """Corrupt index.faiss on disk and verify load_or_rebuild automatically recovers from SQLite."""
     engine, data_dir = test_env
     col = engine.create("col_corrupt", dimension=8, distance="cosine")
-    
+
     vecs = np.random.randn(25, 8).astype(np.float32)
     items = [{"id": f"v{i}", "vector": v.tolist(), "metadata": {"i": i}} for i, v in enumerate(vecs)]
     col.upsert_batch(items)
@@ -69,18 +65,16 @@ def test_corrupt_index_recovery(test_env):
     ids, scores = new_index.search(q, top_k=5)
     assert len(ids) == 5
 
-
 def test_count_mismatch_triggers_rebuild(test_env):
     """When index size != db count (e.g. crash mid-operation), rebuild occurs."""
     engine, data_dir = test_env
     col = engine.create("col_mismatch", dimension=8, distance="cosine")
-    
+
     vecs = np.random.randn(10, 8).astype(np.float32)
     items = [{"id": f"v{i}", "vector": v.tolist(), "metadata": {"i": i}} for i, v in enumerate(vecs)]
     col.upsert_batch(items)
     col.force_save()
 
-    # Add 5 more vectors directly to DB without updating FAISS file
     extra = np.random.randn(5, 8).astype(np.float32)
     extra_fids = col._db.next_faiss_ids(5)
     col._db.upsert_batch([(f"extra_{i}", fid, v, {}, None, None) for i, (fid, v) in enumerate(zip(extra_fids, extra))])
@@ -92,7 +86,6 @@ def test_count_mismatch_triggers_rebuild(test_env):
 
     # Rebuilt to match the DB count of 15
     assert new_index.size == 15
-
 
 def test_snapshot_export_verify_and_import(test_env):
     engine, data_dir = test_env
@@ -110,17 +103,14 @@ def test_snapshot_export_verify_and_import(test_env):
     assert "checksums" in manifest
     assert "metadata.db" in manifest["checksums"]
 
-    # 1. Verify snapshot integrity
     is_valid, msg, loaded_manifest = verify_snapshot(snap_path)
     assert is_valid is True, msg
     assert loaded_manifest["vector_count"] == 30
 
-    # 2. Import into a restored collection
     restore_target = os.path.join(data_dir, "restored_cols")
     restored_manifest = import_snapshot(snap_path, restore_target, "col_snap_restored")
     assert restored_manifest["vector_count"] == 30
     assert os.path.exists(os.path.join(restore_target, "col_snap_restored", "metadata.db"))
-
 
 def test_snapshot_tamper_detection(test_env):
     """Tampering with snapshot bytes fails verify_snapshot."""

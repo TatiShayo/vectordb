@@ -12,13 +12,11 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-
 class IndexType(str, Enum):
     FLAT = "Flat"
     IVF = "IVF"
     HNSW = "HNSW"
     IVFPQ = "IVFPQ"
-
 
 def _auto_type(n: int) -> IndexType:
     from config import FLAT_TO_IVF_THRESHOLD, IVF_TO_HNSW_THRESHOLD
@@ -28,12 +26,10 @@ def _auto_type(n: int) -> IndexType:
         return IndexType.IVF
     return IndexType.HNSW
 
-
 def _auto_nlist(n: int) -> int:
     """nlist = 4 * sqrt(N), clamped 4–4096."""
     import math
     return max(4, min(4096, int(4 * math.sqrt(max(n, 1)))))
-
 
 def _build_index(
     dim: int,
@@ -74,7 +70,6 @@ def _build_index(
         raise ValueError(f"Unknown index type: {itype}")
 
     return faiss.IndexIDMap2(base)
-
 
 class FAISSIndex:
     def __init__(

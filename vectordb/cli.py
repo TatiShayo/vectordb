@@ -16,10 +16,8 @@ BASE  = os.environ.get("VDB_URL",  "http://localhost:8000")
 AKEY  = os.environ.get("VDB_ADMIN_KEY", "admin-secret")
 UKEY  = os.environ.get("VDB_KEY",  "user-secret")
 
-
 def _h(admin=False):
     return {"X-API-Key": AKEY if admin else UKEY, "Content-Type": "application/json"}
-
 
 def _req(method, path, body=None, admin=False, stream=False):
     import urllib.request, urllib.error
@@ -35,15 +33,12 @@ def _req(method, path, body=None, admin=False, stream=False):
         print(f"[{e.code}] {body}", file=sys.stderr)
         sys.exit(1)
 
-
 def _pp(obj):
     print(json.dumps(obj, indent=2, default=str))
-
 
 def _rnd_vec(dim):
     v = np.random.randn(dim).astype(np.float32)
     return (v / np.linalg.norm(v)).tolist()
-
 
 # ── Collections ───────────────────────────────────────────────────────────────
 def cmd_col_list(args): _pp(_req("GET", "/collections"))
@@ -132,7 +127,6 @@ def cmd_tasks(args): _pp(_req("GET", "/admin/tasks"))
 
 def cmd_cache_clear(args): _pp(_req("POST", "/admin/cache/clear", admin=True))
 
-
 # ── Parser ────────────────────────────────────────────────────────────────────
 def main():
     global BASE
@@ -191,7 +185,6 @@ def main():
     if args.url != BASE:
         BASE = args.url
     args.func(args)
-
 
 if __name__ == "__main__":
     main()

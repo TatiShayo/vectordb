@@ -22,7 +22,6 @@ _ce_model = None
 _ce_model_name: str | None = None
 _ce_lock = threading.Lock()
 
-
 def _load_cross_encoder(model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"):
     global _ce_model, _ce_model_name
     if _ce_model is not None and _ce_model_name == model_name:
@@ -39,7 +38,6 @@ def _load_cross_encoder(model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
         except ImportError:
             raise RuntimeError("sentence-transformers required: pip install sentence-transformers")
     return _ce_model
-
 
 def cross_encoder_rerank(
     query: str,
@@ -71,14 +69,12 @@ def cross_encoder_rerank(
     results.sort(key=lambda r: -r["score"])
     return results[:top_k]
 
-
 def is_reranker_available(model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2") -> bool:
     try:
         _load_cross_encoder(model_name)
         return True
     except Exception:
         return False
-
 
 # ── B04 Maximal Marginal Relevance (MMR) ─────────────────────────────────────
 
@@ -141,7 +137,6 @@ def mmr(
         remaining_indices.remove(best)
 
     return [(candidate_ids[i], float(query_sims[i])) for i in selected_indices]
-
 
 # ── B14 Score normalisation ───────────────────────────────────────────────────
 
